@@ -41,10 +41,23 @@ type ConcolicMemory(communicator : Communicator) =
             obj :?> char
         Array.init length parseOneChar
 
-    let parseFields (bytes : byte array) fieldOffsets typ =
+    let rec parseFields (bytes : byte array) fieldOffsets =
         let parseOneField (info : FieldInfo, offset) =
-            let fieldSize = TypeUtils.internalSizeOf info.FieldType |> int
-            let value = Reflection.bytesToObj bytes[offset .. offset + fieldSize - 1] info.FieldType
+            let fieldType = info.FieldType
+            let fieldSize = TypeUtils.internalSizeOf fieldType |> int
+            let value =
+                if fieldType.IsValueType && not fieldType.IsPrimitive then
+                    // TODO: implement case when field is a struct, which has fields with reference types
+                    let fields = Reflection.fieldsOf false fieldType
+                    let fieldOffsets = Array.map (fun (_, info) -> info, Reflection.memoryFieldOffset info) fields
+//                    let getRefOffset (f : FieldInfo, offset) = if not f.FieldType.IsValueType then Some offset else None
+//                    let refOffsets = Array.choose getRefOffset fieldOffsets
+//                    let bytes = communicator.ReadWholeObject address false refOffsets
+                    let bytes = bytes[offset .. offset + fieldSize - 1]
+                    let data = parseFields bytes fieldOffsets |> FieldsData
+                    data :> obj
+                else
+                    Reflection.bytesToObj bytes[offset .. offset + fieldSize - 1] info.FieldType
             info, value
         Array.map parseOneField fieldOffsets
 
@@ -115,7 +128,7 @@ type ConcolicMemory(communicator : Communicator) =
                 let getRefOffset (f : FieldInfo, offset) = if not f.FieldType.IsValueType then Some offset else None
                 let refOffsets = Array.choose getRefOffset fieldOffsets
                 let bytes = communicator.ReadWholeObject address false refOffsets
-                let data = parseFields bytes fieldOffsets actualType |> FieldsData
+                let data = parseFields bytes fieldOffsets |> FieldsData
                 data :> obj
 
         member x.GetAllArrayData address arrayType =
@@ -155,7 +168,7 @@ type ConcolicMemory(communicator : Communicator) =
                 let getRefOffset (f : FieldInfo, offset) = if not f.FieldType.IsValueType then Some offset else None
                 let refOffsets = fieldOffsets |> Array.choose getRefOffset
                 let bytes = communicator.Unmarshall address false refOffsets
-                parseFields bytes fieldOffsets typ |> FieldsData
+                parseFields bytes fieldOffsets |> FieldsData
 
         member x.Allocate physAddress virtAddress =
             physicalAddresses.Add(physAddress, virtAddress)

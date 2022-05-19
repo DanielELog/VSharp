@@ -704,6 +704,7 @@ type ILRewriter(body : rawMethodBody) =
         instr.arg <- NoArg
         match instr.stackState with
         | Some (_ :: _ :: tl)  -> newInstr.stackState <- Some((evaluationStackCellType.I4, [instr]) :: tl)
+        | None -> newInstr.stackState <- None
         | _ -> __unreachable__()
         newInstr.opcode <- OpCode brop
 

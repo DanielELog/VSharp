@@ -167,6 +167,8 @@ module public Reflection =
             let i = t.GetEnumUnderlyingType() |> bytesToObj bytes
             Enum.ToObject(t, i)
         | _ when not t.IsValueType -> BitConverterToUIntPtr bytes 0
+        | _ when Array.forall ((=) 0uy) bytes ->
+            System.Runtime.Serialization.FormatterServices.GetUninitializedObject(t)
         | _ -> internalfailf "creating object from bytes: unexpected object type %O" t
 
     // --------------------------------- Substitute generics ---------------------------------
