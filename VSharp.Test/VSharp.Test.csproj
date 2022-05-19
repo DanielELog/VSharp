@@ -38,8 +38,23 @@
     </ItemGroup>
 
     <ItemGroup>
+      <Reference Include="BCrypt.Net-Next, Version=4.0.3.0, Culture=neutral, PublicKeyToken=1e11be04b6288443">
+        <HintPath>..\..\bcrypt.net\IntegrationTest\TestVariousVersionsOfDotNet\DotNet6\bin\Debug\net6.0\BCrypt.Net-Next.dll</HintPath>
+      </Reference>
       <Reference Include="ChessDotNet, Version=0.9.4.0, Culture=neutral, PublicKeyToken=95fb3ccd1157343b">
         <HintPath>Tests\Chess.NET\ChessDotNet.dll</HintPath>
+      </Reference>
+      <Reference Include="CSharpFunctionalExtensions, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null">
+        <HintPath>..\..\CSharpFunctionalExtensions\CSharpFunctionalExtensions.Tests\bin\Debug\net6.0\CSharpFunctionalExtensions.dll</HintPath>
+      </Reference>
+      <Reference Include="CSharpFunctionalExtensions.Tests, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null">
+        <HintPath>..\..\CSharpFunctionalExtensions\CSharpFunctionalExtensions.Tests\bin\Debug\net6.0\CSharpFunctionalExtensions.Tests.dll</HintPath>
+      </Reference>
+      <Reference Include="DotNet6, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null">
+        <HintPath>..\..\bcrypt.net\IntegrationTest\TestVariousVersionsOfDotNet\DotNet6\bin\Debug\net6.0\DotNet6.dll</HintPath>
+      </Reference>
+      <Reference Include="WebApplication-sandbox, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null">
+        <HintPath>..\..\WebApplication-sandbox\WebApplication-sandbox\bin\Debug\net6.0\osx.10.16-arm64\WebApplication-sandbox.dll</HintPath>
       </Reference>
     </ItemGroup>
 
