@@ -182,6 +182,22 @@ type ClientMachine(entryPoint : MethodBase, requestMakeStep : cilState -> unit, 
             let offset = MakeNumber (fieldOffset + int offset)
             Ptr (StaticLocation typ) Void offset
 
+    member private x.CalleeIfPossible() =
+        let m = Memory.GetCurrentExploringFunction cilState.state
+        let offset = CilStateOperations.currentOffset cilState
+        match offset with
+        | Some offset ->
+            let opCode = Instruction.parseInstruction m offset
+            let cfg = m |> CFG.findCfg
+            let opcodeValue = LanguagePrimitives.EnumOfValue opCode.Value
+            match opcodeValue with
+            | OpCodeValues.Call
+            | OpCodeValues.Callvirt
+            | OpCodeValues.Newobj ->
+                TokenResolver.resolveMethodFromMetadata cfg.methodBase cfg.ilBytes (offset + opCode.Size) |> Some
+            | _ -> None
+        | None -> None
+
     member private x.CalleeArgTypesIfPossible() =
         let m = Memory.GetCurrentExploringFunction cilState.state
         let offset = CilStateOperations.currentOffset cilState
@@ -201,17 +217,44 @@ type ClientMachine(entryPoint : MethodBase, requestMakeStep : cilState -> unit, 
         | None -> internalfail "CalleeParamsIfPossible: could not get offset"
 
     member x.SynchronizeStates (c : execCommand) =
-        let toPop = int c.callStackFramesPops
-        if toPop > 0 then CilStateOperations.popFramesOf toPop cilState
-        assert(Memory.CallStackSize cilState.state > 0)
-        let initFrame (moduleToken, methodToken) =
-            let method = Coverage.resolveMethod moduleToken methodToken
-            initSymbolicFrame method
-        Array.iter initFrame c.newCallStackFrames
         let setIp ip offset =
             match ip with
             | Instruction(_, m) -> Instruction(offset, m)
             | _ -> internalfailf "SynchronizeStates: unexpected ip in ipStack: %O" ip
+        let toPop = int c.callStackFramesPops
+        if toPop > 0 then CilStateOperations.popFramesOf toPop cilState
+        assert(Memory.CallStackSize cilState.state > 0)
+        let ipStack = c.ipStack
+        let initFrame (moduleToken, methodToken) =
+            let current = CilStateOperations.currentMethod cilState
+            let moduleM = Coverage.resolveModule moduleToken
+            let method = moduleM.ResolveMethod(methodToken, current.DeclaringType.GetGenericArguments(), current.GetGenericArguments())
+            let result =
+                if method.ContainsGenericParameters then
+                    let idx = Memory.CallStackSize cilState.state - 1
+                    cilState.ipStack <- (setIp cilState.ipStack.Head (List.item idx ipStack)) :: cilState.ipStack.Tail
+                    match x.CalleeIfPossible() with
+                    | Some m ->
+                        let typArgs = m.DeclaringType.GetGenericArguments()
+                        let typParams = if m.DeclaringType.IsGenericType then m.DeclaringType.GetGenericTypeDefinition().GetGenericArguments() else [||]
+                        let methodArgs, methodParams =
+                            match m with
+                            | :? MethodInfo as mi ->
+                                let methodArgs = mi.GetGenericArguments()
+                                let methodParams = if mi.IsGenericMethod then mi.GetGenericMethodDefinition().GetGenericArguments() else [||]
+                                methodArgs, methodParams
+                            | :? ConstructorInfo -> [||], [||]
+                            | _ -> __unreachable__()
+                        let args = Array.concat [typArgs; methodArgs]
+                        let parameters = Array.concat [typParams; methodParams]
+                        let subst t =
+                            let idx = Array.findIndex ((=)t) parameters
+                            args[idx]
+                        Reflection.concretizeMethodBase method subst
+                    | None -> method
+                else method
+            initSymbolicFrame result
+        Array.iter initFrame c.newCallStackFrames
         cilState.ipStack <- List.map2 setIp cilState.ipStack (List.rev c.ipStack)
         let evalStack = EvaluationStack.PopMany (int c.evaluationStackPops) cilState.state.evaluationStack |> snd
         let concreteMemory = cilState.state.concreteMemory
