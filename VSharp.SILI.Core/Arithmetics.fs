@@ -14,6 +14,8 @@ module Calculator1 =
     type binaryDelegateType = delegate of obj * obj -> obj
 
     let Add(x : obj, y : obj, t : System.Type) =
+        if (TypeUtils.isNumeric <| x.GetType() && TypeUtils.isNumeric <| y.GetType()) |> not then
+            internalfail "lol"
         assert(TypeUtils.isNumeric <| x.GetType() && TypeUtils.isNumeric <| y.GetType())
         let args = [| typeof<obj>; typeof<obj> |]
         let add = DynamicMethod("Add", typeof<obj>, args)

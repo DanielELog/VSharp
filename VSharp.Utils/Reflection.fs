@@ -73,6 +73,7 @@ module public Reflection =
     let resolveMethod (method : MethodBase) methodToken =
         let typGenerics = method.DeclaringType.GetGenericArguments()
         let methodGenerics = retrieveMethodsGenerics method
+//        loadAssembly "Microsoft.Extensions.Hosting.Abstractions, Version=6.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60" |> ignore
         method.Module.ResolveMethod(methodToken, typGenerics, methodGenerics)
 
     let resolveToken (method : MethodBase) token =
@@ -148,6 +149,7 @@ module public Reflection =
         else fun (bytes : byte[]) index -> BitConverter.ToUInt64(bytes, index) |> UIntPtr
 
     let rec bytesToObj (bytes : byte[]) t =
+        if bytes.Length = (TypeUtils.internalSizeOf t |> int) |> not then ()
         assert(bytes.Length = (TypeUtils.internalSizeOf t |> int))
         let span = ReadOnlySpan<byte>(bytes)
         match t with

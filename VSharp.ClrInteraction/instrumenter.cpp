@@ -350,24 +350,6 @@ HRESULT Instrumenter::exportIL(char *bytecode, unsigned codeLength, unsigned max
     return S_OK;
 }
 
-HRESULT Instrumenter::startReJitInstrumented() {
-    LOG(tout << "ReJIT of instrumented methods is started" << std::endl);
-    m_reJitInstrumentedStarted = true;
-    ULONG count = instrumentedFunctions.size();
-    auto *modules = new ModuleID[count];
-    auto *methods = new mdMethodDef[count];
-    int i = 0;
-    for (const auto &it : instrumentedFunctions) {
-        modules[i] = it.first.first;
-        methods[i] = it.first.second;
-        i++;
-    }
-    HRESULT hr = m_profilerInfo.RequestReJIT(count, modules, methods);
-    delete[] modules;
-    delete[] methods;
-    return hr;
-}
-
 HRESULT Instrumenter::startReJitSkipped() {
     LOG(tout << "ReJIT of skipped methods is started" << std::endl);
     ULONG count = skippedBeforeMain.size();
@@ -379,11 +361,11 @@ HRESULT Instrumenter::startReJitSkipped() {
         methods[i] = it.second;
         i++;
     }
-    HRESULT hr = m_profilerInfo.RequestReJIT(count, modules, methods);
+//    HRESULT hr = m_profilerInfo.RequestReJIT(count, modules, methods);
     skippedBeforeMain.clear();
     delete[] modules;
     delete[] methods;
-    return hr;
+    return S_OK;
 }
 
 CommandType Instrumenter::getAndHandleCommand() {

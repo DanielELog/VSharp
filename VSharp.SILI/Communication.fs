@@ -410,6 +410,7 @@ type ConcolicAddressKey =
     | LocalVariable of byte * byte // frame number * idx
     | Parameter of byte * byte // frame number * idx
     | Statics of int16 // static field id
+    | TemporaryAllocatedStruct of byte * byte // frame number * offset
 
 type evalStackOperand =
     | EmptyOp
@@ -722,6 +723,8 @@ type Communicator(pipeFile) =
     member x.ParseArgTypeToken (methodToken : int) (argIndex : int) : uint32 =
         x.SendCommand ParseArgTypeToken
         Array.concat [x.Serialize<int> methodToken; x.Serialize<int> argIndex] |> writeBuffer
+        if (methodToken = 100676697) then ()
+        Logger.error "method token = %O" methodToken
         x.ReadTypeToken()
 
     member x.ParseLocalTypeToken (localIndex : int) : uint32 =
@@ -820,6 +823,7 @@ type Communicator(pipeFile) =
                         | 2uy -> LocalVariable(parseFrameAndIdx())
                         | 3uy -> Parameter(parseFrameAndIdx())
                         | 4uy -> Statics(parseStaticFieldId())
+                        | 5uy -> TemporaryAllocatedStruct(parseFrameAndIdx())
                         | _ -> internalfailf "ReadExecuteCommand: unexpected object location type: %O" locationType
                     PointerOp(baseAddr, shift, key)
                 | evalStackArgType.OpSymbolic

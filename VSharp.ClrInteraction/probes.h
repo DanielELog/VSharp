@@ -62,6 +62,7 @@ struct EvalStackOperand {
                 ObjectType type = location.type;
                 *(BYTE *)buffer = type; buffer += sizeof(BYTE);
                 switch (type) {
+                    case TemporaryAllocatedStruct:
                     case LocalVariable:
                     case Parameter: {
                         StackKey key = location.key.stackKey;
@@ -477,6 +478,7 @@ PROBE(void, Track_Ldarg_S, (UINT8 idx, OFFSET offset)) { if (!ldarg(idx)) sendCo
 PROBE(void, Track_Ldarg, (UINT16 idx, OFFSET offset)) { if (!ldarg(idx)) sendCommand0(offset, false); }
 
 PROBE(void, Track_Ldarga_Primitive, (INT_PTR ptr, UINT16 idx, SIZE size)) {
+    tout << "Track_Ldarga_Primitive: ptr = " << ptr << std::endl;
     Stack &stack = vsharp::stack();
     unsigned frame = stack.framesCount();
     StackFrame &top = stack.topFrame();
@@ -491,9 +493,11 @@ PROBE(void, Track_Ldarga_Primitive, (INT_PTR ptr, UINT16 idx, SIZE size)) {
 }
 
 PROBE(void, Track_Ldarga_Struct, (INT_PTR ptr, UINT16 idx)) {
+    tout << "Track_Ldarga_Struct: ptr = " << ptr << std::endl;
     StackFrame &top = topFrame();
     LocalObject &cell = top.arg(idx);
     cell.changeAddress(ptr);
+    tout << "Track_Ldarga_Struct: size = " << cell.sizeOf() << std::endl;
     heap.allocateLocal(&cell);
     top.addAllocatedLocal(&cell);
     top.push1Concrete();
@@ -668,16 +672,20 @@ PROBE(void, Track_Ldobj, (INT_PTR ptr, OFFSET offset)) { /* TODO! will ptr be al
 PROBE(void, Track_Ldstr, (INT_PTR ptr)) { topFrame().push1Concrete(); } // TODO: do we need allocated address?
 PROBE(void, Track_Ldtoken, ()) { topFrame().push1Concrete(); }
 
-PROBE(void, Track_Stobj, (INT_PTR ptr)) {
+PROBE(void, Track_Stobj, (INT_PTR src, INT_PTR dest, OFFSET offset)) {
     // TODO!
     // Will ptr be always concrete?
     topFrame().pop(2);
 }
 
+// If typeTok is a value type, the initobj instruction initializes each field of dest to null or a zero of the appropriate built-in type.
+// If typeTok is a reference type, the initobj instruction has the same effect as ldnull followed by stind.ref.
+// TODO: add two cases (ref and valueType)
 PROBE(void, Track_Initobj, (INT_PTR ptr)) {
     bool ptrIsConcrete = topFrame().pop1();
-    if (ptrIsConcrete)
+    if (ptrIsConcrete) {
         heap.writeConcretenessWholeObject(ptr, true);
+    }
     // TODO: send command if (ptrIsConcrete = false) #do
 }
 
@@ -748,6 +756,7 @@ inline bool ldfld(INT_PTR fieldPtr, INT32 fieldSize) {
 
 // TODO: if objPtr = null, it's static field
 PROBE(void, Track_Ldfld, (INT_PTR objPtr, INT_PTR fieldPtr, INT32 fieldSize, OFFSET offset)) {
+    tout << "objPtr = " << objPtr << ", fieldPtr = " << fieldPtr << ", fieldSize = " << fieldSize << std::endl;
     if (!ldfld(fieldPtr, fieldSize)) {
         sendCommand(offset, 1, new EvalStackOperand[1] { mkop_p(objPtr) });
     } else {
@@ -837,19 +846,18 @@ PROBE(COND, Track_Ldelem, (INT_PTR ptr, INT_PTR index, INT32 elemSize)) {
     StackFrame &top = vsharp::topFrame();
     bool iConcrete = top.peek0();
     bool ptrConcrete = top.peek1();
+    top.pop(2);
     int metadataSize = sizeof(INT_PTR) + sizeof(INT64);
     INT_PTR elemPtr = ptr + index * elemSize + metadataSize;
     bool memory = false;
-    if (ptrConcrete) memory = heap.readConcreteness(elemPtr, elemSize);
-    top.pop(2);
-    bool concreteness = iConcrete && ptrConcrete && memory;
-    if (concreteness) top.push1Concrete();
-    return concreteness;
-
-    return top.pop1() && top.peek0();
+    if (ptrConcrete && iConcrete) memory = heap.readConcreteness(elemPtr, elemSize);
+    tout << "Track_Ldelem: memory = " << memory << std::endl;
+    if (memory) top.push1Concrete();
+    return memory;
 }
 PROBE(void, Exec_Ldelema, (INT_PTR ptr, INT_PTR index, OFFSET offset)) { /*send command*/ }
 PROBE(void, Exec_Ldelem, (INT_PTR ptr, INT_PTR index, OFFSET offset)) {
+    tout << "Exec_Ldelem" << std::endl;
     sendCommand(offset, 2, new EvalStackOperand[2] {mkop_p(ptr), mkop_4(index)});
 }
 
@@ -908,6 +916,7 @@ PROBE(void, Track_Mkrefany, ()) {
 }
 
 PROBE(void, SetArgSize, (INT8 idx, SIZE size)) {
+    tout << "SetArgSize: idx = " << idx << ", size = " << size << std::endl;
     assert(size > 0);
     Stack &stack = vsharp::stack();
     unsigned frame = stack.framesCount();
@@ -984,8 +993,11 @@ PROBE(void, Track_Leave, (UINT8 returnValues, OFFSET offset)) {
     StackFrame &top = stack.topFrame();
 #ifdef _DEBUG
     assert(returnValues == 0 || returnValues == 1);
-    if (top.count() != returnValues) {
+    if (top.count() > returnValues) {
         FAIL_LOUD("Corrupted stack: stack is not empty when popping frame!");
+    }
+    if (top.count() < returnValues) {
+        FAIL_LOUD("Corrupted stack: function should return value, but it's not!");
     }
 #endif
     if (returnValues) {
@@ -1107,6 +1119,7 @@ PROBE(void, PushFrame, (mdToken unresolvedToken, mdMethodDef resolvedToken, bool
 }
 
 PROBE(void, PushTemporaryAllocatedStruct, (SIZE size, OFFSET offset)) {
+    tout << "PushTemporaryAllocatedStruct: size = " << size << std::endl;
     Stack &stack = vsharp::stack();
     StackFrame &top = stack.topFrame();
     unsigned frame = stack.framesCount();

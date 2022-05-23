@@ -300,6 +300,7 @@ bool SigParser::Parse(sig_byte *pb, sig_count cbBuffer)
     if (!ParseByte(&elem_type))
         return false;
 
+    tout << "first elem_type = " << (int)elem_type << std::endl;
     switch (elem_type & 0xf)
     {
         case SIG_METHOD_DEFAULT:  // default calling convention
@@ -350,6 +351,7 @@ bool SigParser::ParseMethod(sig_elem_type elem_type)
     // MethodDefSig ::= [[HASTHIS] [EXPLICITTHIS]] (DEFAULT|VARARG|GENERIC GenParamCount)
     //                    ParamCount RetType Param* [SENTINEL Param+]
 
+    tout << "2 first elem_type = " << (int)elem_type << std::endl;
     NotifyBeginMethod(elem_type);
 
     sig_count gen_param_count;

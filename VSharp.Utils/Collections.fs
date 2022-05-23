@@ -166,7 +166,11 @@ module public Stack =
         | [] -> failwith "Attempt to pop an empty stack"
         | head :: tl -> head, tl
 
-    let drop count s = List.skip count s
+    let drop count s =
+        try
+            List.skip count s
+        with _ ->
+            internalfail "kek"
 
     let push stack element = element::stack
 

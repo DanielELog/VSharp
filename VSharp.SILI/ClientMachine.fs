@@ -23,7 +23,7 @@ type ClientMachine(entryPoint : MethodBase, requestMakeStep : cilState -> unit, 
     [<DefaultValue>] val mutable probes : probes
     [<DefaultValue>] val mutable instrumenter : Instrumenter
 
-    let cilState : cilState =
+    let mutable cilState : cilState =
         cilState.concolicState <- Running
         cilState
 
@@ -56,7 +56,7 @@ type ClientMachine(entryPoint : MethodBase, requestMakeStep : cilState -> unit, 
         let t = TypeOfAddress state address |> Types.ToDotNetType
         CSharpUtils.LayoutUtils.MetadataSize t
 
-    static let mutable id = 0
+    static let mutable clientId = 0
 
     let mutable callIsSkipped = false
     let mutable mainReached = false
@@ -77,7 +77,7 @@ type ClientMachine(entryPoint : MethodBase, requestMakeStep : cilState -> unit, 
             result.Arguments <- method.Module.Assembly.Location
         else
             let runnerPath = "VSharp.TestRunner.dll"
-            result.Arguments <- sprintf "%s %s %O" runnerPath (tempTest id) false
+            result.Arguments <- sprintf "%s %s %O" runnerPath (tempTest clientId) false
         result
 
     [<DefaultValue>] val mutable private communicator : Communicator
@@ -115,23 +115,23 @@ type ClientMachine(entryPoint : MethodBase, requestMakeStep : cilState -> unit, 
             | TypeVariablesUnknown -> raise (InsufficientInformationException "Could not detect appropriate substitution of generic parameters")
             | TypesOfInputsUnknown -> raise (InsufficientInformationException "Could not detect appropriate types of inputs")
             | TypeUnsat -> __unreachable__()
-        test.Serialize(tempTest id)
+        test.Serialize(tempTest clientId)
 
     member x.Spawn() =
         x.CreateTest()
         let pipe, pipePath =
             if RuntimeInformation.IsOSPlatform(OSPlatform.Windows) then
-                let pipe = sprintf "concolic_fifo_%d.pipe" id
+                let pipe = sprintf "concolic_fifo_%d.pipe" clientId
                 let pipePath = sprintf "\\\\.\\pipe\\%s" pipe
                 pipe, pipePath
             else
-                let pipeFile = sprintf "%sconcolic_fifo_%d.pipe" pathToTmp id
+                let pipeFile = sprintf "%sconcolic_fifo_%d.pipe" pathToTmp clientId
                 pipeFile, pipeFile
         let env = environment entryPoint pipePath
         x.communicator <- new Communicator(pipe)
         concolicProcess <- Process.Start env
         isRunning <- true
-        id <- id + 1
+        clientId <- clientId + 1
         concolicProcess.OutputDataReceived.Add <| fun args -> Logger.trace "CONCOLIC OUTPUT: %s" args.Data
         concolicProcess.ErrorDataReceived.Add <| fun args -> Logger.trace "CONCOLIC ERROR: %s" args.Data
         concolicProcess.BeginOutputReadLine()
@@ -181,6 +181,21 @@ type ClientMachine(entryPoint : MethodBase, requestMakeStep : cilState -> unit, 
             let fieldOffset = CSharpUtils.LayoutUtils.GetFieldOffset fieldInfo
             let offset = MakeNumber (fieldOffset + int offset)
             Ptr (StaticLocation typ) Void offset
+        | TemporaryAllocatedStruct(frameNumber, frameOffset) ->
+            let frameOffset = int frameOffset
+            let frame = List.item (List.length cilState.ipStack - int frameNumber) cilState.ipStack
+            let method = CilStateOperations.methodOf frame
+            let opCode = Instruction.parseInstruction method frameOffset
+            let cfg = method |> CFG.findCfg
+            let opcodeValue = LanguagePrimitives.EnumOfValue opCode.Value
+            match opcodeValue with
+            | OpCodeValues.Newobj ->
+                let calleeOffset = frameOffset + opCode.Size
+                let callee = TokenResolver.resolveMethodFromMetadata cfg.methodBase cfg.ilBytes calleeOffset
+                let stackKey = TemporaryLocalVariableKey callee.DeclaringType
+                let offset = int offset |> MakeNumber
+                Ptr (StackLocation stackKey) Void offset
+            | x -> internalfailf "MarshallRefFromConcolic: unexpected opcode %O" x
 
     member private x.CalleeIfPossible() =
         let m = Memory.GetCurrentExploringFunction cilState.state
@@ -212,7 +227,10 @@ type ClientMachine(entryPoint : MethodBase, requestMakeStep : cilState -> unit, 
             | OpCodeValues.Newobj ->
                 let callee = TokenResolver.resolveMethodFromMetadata cfg.methodBase cfg.ilBytes (offset + opCode.Size)
                 let argTypes = callee.GetParameters() |> Array.map (fun p -> p.ParameterType)
-                if Reflection.hasThis callee then Array.append [|callee.DeclaringType|] argTypes else argTypes
+                let isNewObj = opcodeValue = OpCodeValues.Newobj
+                if Reflection.hasThis callee && not isNewObj then
+                    Array.append [|callee.DeclaringType|] argTypes
+                else argTypes
             | _ -> internalfail "CalleeParamsIfPossible: unexpected opcode"
         | None -> internalfail "CalleeParamsIfPossible: could not get offset"
 
@@ -225,6 +243,7 @@ type ClientMachine(entryPoint : MethodBase, requestMakeStep : cilState -> unit, 
         if toPop > 0 then CilStateOperations.popFramesOf toPop cilState
         assert(Memory.CallStackSize cilState.state > 0)
         let ipStack = c.ipStack
+        if ipStack.Length = 4 then ()
         let initFrame (moduleToken, methodToken) =
             let current = CilStateOperations.currentMethod cilState
             let moduleM = Coverage.resolveModule moduleToken
@@ -235,8 +254,9 @@ type ClientMachine(entryPoint : MethodBase, requestMakeStep : cilState -> unit, 
                     cilState.ipStack <- (setIp cilState.ipStack.Head (List.item idx ipStack)) :: cilState.ipStack.Tail
                     match x.CalleeIfPossible() with
                     | Some m ->
-                        let typArgs = m.DeclaringType.GetGenericArguments()
-                        let typParams = if m.DeclaringType.IsGenericType then m.DeclaringType.GetGenericTypeDefinition().GetGenericArguments() else [||]
+                        let mType = m.DeclaringType
+                        let typArgs = mType.GetGenericArguments()
+                        let typParams = if mType.IsGenericType then mType.GetGenericTypeDefinition().GetGenericArguments() else [||]
                         let methodArgs, methodParams =
                             match m with
                             | :? MethodInfo as mi ->
@@ -247,9 +267,16 @@ type ClientMachine(entryPoint : MethodBase, requestMakeStep : cilState -> unit, 
                             | _ -> __unreachable__()
                         let args = Array.concat [typArgs; methodArgs]
                         let parameters = Array.concat [typParams; methodParams]
+                        let methodType = method.DeclaringType
+                        let typeEq =
+                            // NOTE: one type may more concrete than another (because of callvirt)
+                            if mType.IsInterface || methodType.IsInterface || mType.ContainsGenericParameters || methodType.ContainsGenericParameters then
+                                fun (t1 : Type) (t2 : Type) -> t1.Name = t2.Name && t1.Namespace = t2.Namespace // TODO: make better #do
+                            else fun (t1 : Type) (t2 : Type) -> t1 = t2
                         let subst t =
-                            let idx = Array.findIndex ((=)t) parameters
-                            args[idx]
+                            match Array.tryFindIndex (typeEq t) parameters with
+                            | Some idx -> args[idx]
+                            | None -> t
                         Reflection.concretizeMethodBase method subst
                     | None -> method
                 else method
@@ -293,6 +320,7 @@ type ClientMachine(entryPoint : MethodBase, requestMakeStep : cilState -> unit, 
         let evalStack = Array.fold (fun stack x -> EvaluationStack.Push x stack) evalStack newEntries
         cilState.state.evaluationStack <- evalStack
         cilState.lastPushInfo <- None
+        Logger.trace "Sync"
 
     member x.State with get() = cilState
 
@@ -372,7 +400,47 @@ type ClientMachine(entryPoint : MethodBase, requestMakeStep : cilState -> unit, 
 //        | None -> None
         None
 
+    member private x.InitialState =
+        let initialState = Memory.EmptyState()
+        let cilState = CilStateOperations.makeInitialState entryPoint initialState
+        let arguments =
+            entryPoint.GetParameters()
+            |> Array.map (fun p -> Memory.DefaultOf (Types.FromDotNetType p.ParameterType))
+            |> List.ofArray
+            |> Some
+        let this(*, isMethodOfStruct*) =
+            if entryPoint.IsStatic then None
+            else
+                let this = Memory.MakeSymbolicThis entryPoint
+                !!(IsNullReference this) |> AddConstraint initialState
+                Some this
+        ILInterpreter.InitFunctionFrame initialState entryPoint this arguments
+        cilState
+
+    member private x.SelectState (steppedStates : cilState list) =
+        let filterNonDefault (cilState : cilState) =
+            let subst term =
+                match term.term with
+                | Constant(_, source, typ) ->
+                    match source with
+                    | StackReading (ParameterKey _) -> Memory.DefaultOf typ
+                    | _ -> term
+                | _ -> term
+            // TODO: use fillHoles with empty state, where parameters are default #do
+            let formula = PathConditionToSeq cilState.state.pc |> conjunction
+//            let t = Memory.FillHoles x.InitialState.state formula
+            let t = Substitution.substitute subst id id formula
+            match SolverInteraction.checkTermSat cilState.state t with
+            | SolverInteraction.SmtSat _
+            | SolverInteraction.SmtUnknown _ -> true
+            | SolverInteraction.SmtUnsat _ -> false
+        let states = List.filter filterNonDefault steppedStates
+        match states with
+        | [] -> internalfail ""
+        | _ -> List.head states
+
     member x.StepDone (steppedStates : cilState list) =
+        Logger.trace "StepDone"
         let methodEnded = CilStateOperations.methodEnded cilState
         let notEndOfEntryPoint = CilStateOperations.currentIp cilState <> Exit entryPoint
         let isIIEState = CilStateOperations.isIIEState cilState
@@ -381,9 +449,13 @@ type ClientMachine(entryPoint : MethodBase, requestMakeStep : cilState -> unit, 
             if InstructionsSet.isFSharpInternalCall method then callIsSkipped <- true
             cilState
         else
+            if List.length steppedStates > 1 then ()
             let concretizedOps =
                 if callIsSkipped then Some List.empty
                 else steppedStates |> List.tryPick x.EvalOperands
+            Logger.trace "before select"
+            cilState <- x.SelectState(steppedStates)
+            Logger.trace "after select"
             let concolicMemory = cilState.state.concreteMemory
             let disconnectConcolic cilState =
                 cilState.concolicState <- Disabled
@@ -394,10 +466,12 @@ type ClientMachine(entryPoint : MethodBase, requestMakeStep : cilState -> unit, 
                 cilState.state.concreteMemory <- concolicMemory
             if notEndOfEntryPoint && not isIIEState then connectConcolic cilState
             let topIsEmpty = EvaluationStack.TopIsEmpty cilState.state.evaluationStack
+            Logger.trace "lastPushInfo"
             let lastPushInfo =
                 match cilState.lastPushInfo with
                 | Some x when IsConcrete x && notEndOfEntryPoint && topIsEmpty ->
                     // NOTE: Newobj case
+                    // TODO: make better #refactoring
                     let evaluationStack = EvaluationStack.PopFromAnyFrame cilState.state.evaluationStack |> snd
                     cilState.state.evaluationStack <- evaluationStack
                     None
@@ -406,12 +480,15 @@ type ClientMachine(entryPoint : MethodBase, requestMakeStep : cilState -> unit, 
                     Some true
                 | Some _ -> Some false
                 | None -> None
+            Logger.trace "internalCallResult"
             let internalCallResult =
                 match cilState.lastPushInfo with
                 | Some res when callIsSkipped ->
                     x.ConcreteToObj res
                 | _ -> None
             let framesCount = Memory.CallStackSize cilState.state
+            Logger.trace "SendExecResponse"
             x.communicator.SendExecResponse concretizedOps internalCallResult lastPushInfo framesCount
             callIsSkipped <- false
+            Logger.trace "end"
             cilState

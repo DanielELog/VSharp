@@ -14,8 +14,8 @@ type InsufficientInformationException(msg : string) =
 [<AutoOpen>]
 module public Prelude =
 
-    let public internalfail message = raise (InternalException message)
-    let public internalfailf format = Printf.ksprintf internalfail format
+    let public internalfail message = Printf.ksprintf (fun reason -> InsufficientInformationException ("Insufficient information! " + reason) |> raise) message
+    let public internalfailf format = Printf.ksprintf (fun reason -> InsufficientInformationException ("Insufficient information! " + reason) |> raise) format
     let undefinedBehaviour reason = internalfailf "Undefined behaviour: %s" reason
 
     let inline public __notImplemented__() = raise (NotImplementedException())

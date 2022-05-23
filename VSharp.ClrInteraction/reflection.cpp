@@ -397,7 +397,9 @@ private:
 protected:
 
     void NotifyBeginMethod(sig_elem_type elem_type) {
-        if (elem_type == SIG_HASTHIS) {
+        tout << "3 first elem_type = " << (int)elem_type << std::endl;
+        tout << "elem_type = " << elem_type << std::endl;
+        if (elem_type & SIG_HASTHIS) {
             m_hasThis = true;
             currentParam++;
             if (parameterIndex == 0) {
@@ -408,6 +410,7 @@ protected:
     }
 
     void NotifyBeginParam() {
+        tout << "NotifyBeginParam" << std::endl;
         if (currentParam == parameterIndex) {
             m_parsingParameter = true;
         }
@@ -444,6 +447,10 @@ public:
     }
 
     mdToken paramType() {
+        tout << "m_hasThis = " << m_hasThis << std::endl;
+        tout << "parameterIndex = " << parameterIndex << std::endl;
+        tout << "m_typeParseStarted = " << m_typeParseStarted << std::endl;
+        tout << "m_typeParsed = " << m_typeParsed << std::endl;
         assert(m_typeParseStarted && m_typeParsed);
         if (m_hasThis && parameterIndex == 0)
             return declaringType;
@@ -774,6 +781,9 @@ mdToken Reflection::getTypeTokenFromParameter(mdToken method, INT32 argIndex) co
     PCCOR_SIGNATURE signature;
     ULONG count;
     getSigAndDeclaringTypeFromMethod(method, signature, count, declaringType);
+    for (int i = 0; i < count; i++) {
+        tout << "sig_byte = " << HEX((int)signature[i]) << std::endl;
+    }
     MethodParamTypeParser *methodParamTypeParser = new MethodParamTypeParser(metadataEmit, argIndex, declaringType);
     if (!methodParamTypeParser->Parse((sig_byte *)signature, count)) FAIL_LOUD("getTypeTokenFromParameter: parsing method failed!");
     mdToken paramType = methodParamTypeParser->paramType();

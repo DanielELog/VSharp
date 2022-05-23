@@ -40,3 +40,9 @@ module public SolverInteraction =
         match solver with
         | Some s -> s.CheckSat ctx {lvl = Level.zero; queryFml = formula }
         | None -> SmtUnknown ""
+
+    let checkTermSat state term =
+        let ctx = getEncodingContext state
+        match solver with
+        | Some s -> s.CheckSat ctx {lvl = Level.zero; queryFml = term }
+        | None -> SmtUnknown ""

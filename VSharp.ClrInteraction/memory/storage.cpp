@@ -104,7 +104,9 @@ namespace vsharp {
     }
 
     Object::~Object() {
+        tout << "destructor of " << (UINT_PTR) this << ", address = " << this->left << std::endl;
         delete[] concreteness;
+        concreteness = nullptr;
     }
 
     std::string Object::toString() const {
@@ -113,6 +115,8 @@ namespace vsharp {
 
     bool Object::readConcreteness(SIZE offset, SIZE size) const {
         assert(size > 0);
+        tout << "sizeof = " << this->sizeOf() << std::endl;
+        tout << "size = " << size << ", offset = " << offset << std::endl;
         auto startOffset = offset % sizeofCell;
         auto startIndex = offset / sizeofCell;
         auto endOffset = (offset + size) % sizeofCell;
@@ -289,9 +293,11 @@ namespace vsharp {
     OBJID Storage::allocateLocal(LocalObject *local) {
         const Interval *i;
         if (!tree.find(local->left, i)) {
+            tout << "allocated! " << local->left << ", local.size = " << local->sizeOf() << std::endl;
             tree.add(*local);
             return (OBJID) local;
         }
+        tout << "allocateLocal end" << std::endl;
         return (OBJID) i;
     }
 
@@ -317,6 +323,7 @@ namespace vsharp {
     bool Storage::readConcreteness(ADDR address, SIZE sizeOfPtr) const {
         VirtualAddress vAddress{};
         if (!resolve(address, vAddress)) {
+//            return true;
             FAIL_LOUD("Unbound pointer!");
         }
 
@@ -343,7 +350,9 @@ namespace vsharp {
         }
 
         auto *obj = (Object *) vAddress.obj;
-        obj->writeConcreteness(vAddress.offset, obj->sizeOf(), vConcreteness);
+        tout << "vAddress.offset = " << vAddress.offset << std::endl;
+        assert(vAddress.offset == 0);
+        obj->writeConcretenessWholeObject(vConcreteness);
     }
 
     char *Storage::readBytes(const VirtualAddress &address, SIZE sizeOfPtr, BYTE isRef) const {

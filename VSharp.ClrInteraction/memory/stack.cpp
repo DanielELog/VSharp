@@ -107,6 +107,7 @@ void StackFrame::pop0()
 
 void StackFrame::push1(const LocalObject& obj)
 {
+    tout << "push1" << std::endl;
 #ifdef _DEBUG
     if (isFull()) {
         LOG(tout << "Frame info before stack overflow: balance = " << m_concretenessTop << ", capacity = " << m_capacity

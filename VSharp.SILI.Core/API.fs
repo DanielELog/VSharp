@@ -174,6 +174,7 @@ module API =
             match term.term with
             | Concrete _ -> true
             | HeapRef(address, _) when isConcreteHeapAddress address -> true
+            | Ref (PrimitiveStackLocation _) -> true
             | _ -> false
         let IsNullReference term = Pointers.isNull term
 
@@ -588,6 +589,7 @@ module API =
             | _ -> internalfailf "constructing string from char array: expected string reference, but got %O" dstRef
 
         let ComposeStates state state' = Memory.composeStates state state'
+        let FillHoles state term = Memory.fillHoles state term
         let WLP state pc' = PC.mapPC (Memory.fillHoles state) pc' |> PC.union state.pc
 
         let Merge2States (s1 : state) (s2 : state) = Memory.merge2States s1 s2

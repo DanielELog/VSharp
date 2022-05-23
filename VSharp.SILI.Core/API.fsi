@@ -290,6 +290,7 @@ module API =
 
         // TODO: get rid of all unnecessary stuff below!
         val ComposeStates : state -> state -> state list
+        val FillHoles : state -> term -> term
         val WLP : state -> pathCondition -> pathCondition
 
         val Merge2States : state -> state -> state list
