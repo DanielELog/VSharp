@@ -1,12 +1,162 @@
 namespace VSharp.Fuzzer
 
+open System.Runtime.InteropServices
 open VSharp
 open System.Reflection
 open System.Reflection.Emit
 open System.Collections.Generic
-open VSharp.Interpreter.IL
 
-type InstrumenterCoverage(communicator : ICommunicator, entryPoint : MethodBase, probes : probes) =
+[<type: StructLayout(LayoutKind.Sequential, Pack=1, CharSet=CharSet.Ansi)>]
+type probesCov = {
+    mutable trackCoverage : uint64
+    mutable brtrue : uint64
+    mutable brfalse : uint64
+    mutable switch : uint64
+    mutable enter : uint64
+    mutable enterMain : uint64
+    mutable leave : uint64
+    mutable leaveMain_0 : uint64
+    mutable leaveMain_4 : uint64
+    mutable leaveMain_8 : uint64
+    mutable leaveMain_f4 : uint64
+    mutable leaveMain_f8 : uint64
+    mutable leaveMain_p : uint64
+    mutable finalizeCall : uint64
+}
+with
+    member private x.Probe2str =
+        let map = System.Collections.Generic.Dictionary<uint64, string>()
+        typeof<probes>.GetFields() |> Seq.iter (fun fld -> map.Add(fld.GetValue x |> unbox, fld.Name))
+        map
+    member x.AddressToString (address : int64) =
+        let result = ref ""
+        if x.Probe2str.TryGetValue(uint64 address, result) then "probe_" + result.Value
+        else toString address
+
+[<type: StructLayout(LayoutKind.Sequential, Pack=1, CharSet=CharSet.Ansi)>]
+type signatureTokensCov = {
+    mutable void_sig : uint32
+    mutable bool_sig : uint32
+    mutable i_sig : uint32
+    mutable void_u_sig : uint32
+    mutable void_u1_sig : uint32
+    mutable void_u4_sig : uint32
+    mutable void_i_sig : uint32
+    mutable bool_i_sig : uint32
+    mutable bool_u2_sig : uint32
+    mutable i1_i1_sig : uint32
+    mutable i2_i1_sig : uint32
+    mutable i4_i1_sig : uint32
+    mutable i8_i1_sig : uint32
+    mutable r4_i1_sig : uint32
+    mutable r8_i1_sig : uint32
+    mutable i_i1_sig : uint32
+    mutable void_i_i1_sig : uint32
+    mutable void_i_i2_sig : uint32
+    mutable void_i_u2_sig : uint32
+    mutable void_i_i4_sig : uint32
+    mutable void_i_i8_sig : uint32
+    mutable void_i_r4_sig : uint32
+    mutable void_i_r8_sig : uint32
+    mutable void_i_i_sig : uint32
+    mutable void_i1_size_sig : uint32
+    mutable bool_i_i4_sig : uint32
+    mutable bool_i_i_sig : uint32
+    mutable bool_i_i_i4_sig : uint32
+    mutable void_i_i_i_sig : uint32
+    mutable void_i_i_i1_sig : uint32
+    mutable void_i_i_i2_sig : uint32
+    mutable void_i_i_i4_sig : uint32
+    mutable void_i_i_i8_sig : uint32
+    mutable void_i_i_r4_sig : uint32
+    mutable void_i_i_r8_sig : uint32
+    mutable void_i1_i1_offset_sig : uint32
+    mutable void_i2_i1_offset_sig : uint32
+    mutable void_i4_i1_offset_sig : uint32
+    mutable void_i8_i1_offset_sig : uint32
+    mutable void_r4_i1_offset_sig : uint32
+    mutable void_r8_i1_offset_sig : uint32
+    mutable void_i8_i4_offset_sig : uint32
+    mutable void_i8_i8_offset_sig : uint32
+    mutable void_r4_r4_offset_sig : uint32
+    mutable void_r8_r8_offset_sig : uint32
+    mutable void_i_i1_i1_sig : uint32
+    mutable void_i_i4_i2_sig : uint32
+    mutable void_offset_sig : uint32
+    mutable void_u1_offset_sig : uint32
+    mutable void_u2_offset_sig : uint32
+    mutable void_i4_offset_sig : uint32
+    mutable void_i8_offset_sig : uint32
+    mutable void_r4_offset_sig : uint32
+    mutable void_r8_offset_sig : uint32
+    mutable void_i_offset_sig : uint32
+    mutable void_token_offset_sig : uint32
+    mutable void_size_offset_sig : uint32
+    mutable void_i4_i4_offset_sig : uint32
+    mutable void_i_i1_offset_sig : uint32
+    mutable void_i_i2_offset_sig : uint32
+    mutable void_i_i4_offset_sig : uint32
+    mutable void_i_i8_offset_sig : uint32
+    mutable void_i_r4_offset_sig : uint32
+    mutable void_i_r8_offset_sig : uint32
+    mutable void_i_i_offset_sig : uint32
+    mutable void_i_token_offset_sig : uint32
+    mutable void_i_u2_size_sig : uint32
+    mutable void_i_i4_i1_offset_sig : uint32
+    mutable void_i_i4_i2_offset_sig : uint32
+    mutable void_i_i4_i4_offset_sig : uint32
+    mutable void_i_i4_i8_offset_sig : uint32
+    mutable void_i_i4_r4_offset_sig : uint32
+    mutable void_i_i4_r8_offset_sig : uint32
+    mutable void_i_i4_i_offset_sig : uint32
+    mutable void_u2_i4_i4_offset_sig : uint32
+    mutable void_u2_i4_i_offset_sig : uint32
+    mutable void_u2_i8_i4_offset_sig : uint32
+    mutable void_u2_i8_i8_offset_sig : uint32
+    mutable void_u2_r4_r4_offset_sig : uint32
+    mutable void_u2_r8_r8_offset_sig : uint32
+    mutable void_u2_i_i_offset_sig : uint32
+    mutable void_u2_i_i4_offset_sig : uint32
+    mutable void_i_i_i_offset_sig : uint32
+    mutable void_i_i_i1_offset_sig : uint32
+    mutable void_i_i_i2_offset_sig : uint32
+    mutable void_i_i_i4_offset_sig : uint32
+    mutable void_i_i_i8_offset_sig : uint32
+    mutable void_i_i_r4_offset_sig : uint32
+    mutable void_i_i_r8_offset_sig : uint32
+    mutable void_i_i1_i_offset_sig : uint32
+    mutable void_i4_i_i4_offset_sig : uint32
+    mutable void_i4_i_i8_offset_sig : uint32
+    mutable void_i4_i_r4_offset_sig : uint32
+    mutable void_i4_i_r8_offset_sig : uint32
+    mutable void_i4_i_i_offset_sig : uint32
+    mutable void_token_i_i_offset_sig : uint32
+    mutable void_i_i_i_i4_offset_sig : uint32
+    mutable void_i_i_i1_i4_offset_sig : uint32
+    mutable void_i_i_i2_i4_offset_sig : uint32
+    mutable void_i_i_i4_i4_offset_sig : uint32
+    mutable void_i_i_i8_i4_offset_sig : uint32
+    mutable void_i_i_r4_i4_offset_sig : uint32
+    mutable void_i_i_r8_i4_offset_sig : uint32
+    mutable void_i4_i4_i_i_offset_sig : uint32
+    mutable void_i_i4_i_i_offset_sig : uint32
+    mutable void_token_token_bool_u2_offset_sig : uint32
+    mutable void_token_u4_u4_u4_u4_i1_sig : uint32
+    mutable void_token_u4_u2_bool_u4_u4_sig : uint32
+}
+with
+    member private x.SigToken2str =
+        let map = System.Collections.Generic.Dictionary<uint32, string>()
+        typeof<signatureTokens>.GetFields() |> Seq.iter (fun fld ->
+            let token : uint32 = fld.GetValue x |> unbox
+            if not <| map.ContainsKey token then map.Add(token, fld.Name))
+        map
+    member x.TokenToString (token : int32) =
+        let result = ref ""
+        if x.SigToken2str.TryGetValue(uint32 token, result) then result.Value
+        else "<UNKNOWN TOKEN!>"
+
+type InstrumenterCoverage(communicator : ICommunicator, entryPoint : MethodBase, probes : probesCov) =
     // TODO: should we consider executed assembly build options here?
     let ldc_i : opcode = (if System.Environment.Is64BitOperatingSystem then OpCodes.Ldc_I8 else OpCodes.Ldc_I4) |> VSharp.OpCode
     let mutable currentStaticFieldID = 0
@@ -16,7 +166,7 @@ type InstrumenterCoverage(communicator : ICommunicator, entryPoint : MethodBase,
     let functionsIDs = Dictionary<int, MethodInfo>()
 
     static member private instrumentedFunctions = HashSet<MethodBase>()
-    [<DefaultValue>] val mutable tokens : signatureTokens
+    [<DefaultValue>] val mutable tokens : signatureTokensCov
     [<DefaultValue>] val mutable rewriter : ILRewriter
     [<DefaultValue>] val mutable m : MethodBase
 

@@ -10,6 +10,7 @@
     <ItemGroup>
         <Compile Include="Config.fs" />
         <Compile Include="Fuzzer.fs" />
+        <Compile Include="ILRewriterCoverage.fs" />
         <Compile Include="InstrumenterCoverage.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
