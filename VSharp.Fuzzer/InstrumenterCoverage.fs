@@ -26,7 +26,7 @@ type probesCov = {
 with
     member private x.Probe2str =
         let map = System.Collections.Generic.Dictionary<uint64, string>()
-        typeof<probes>.GetFields() |> Seq.iter (fun fld -> map.Add(fld.GetValue x |> unbox, fld.Name))
+        typeof<probesCov>.GetFields() |> Seq.iter (fun fld -> map.Add(fld.GetValue x |> unbox, fld.Name))
         map
     member x.AddressToString (address : int64) =
         let result = ref ""
@@ -147,7 +147,7 @@ type signatureTokensCov = {
 with
     member private x.SigToken2str =
         let map = System.Collections.Generic.Dictionary<uint32, string>()
-        typeof<signatureTokens>.GetFields() |> Seq.iter (fun fld ->
+        typeof<signatureTokensCov>.GetFields() |> Seq.iter (fun fld ->
             let token : uint32 = fld.GetValue x |> unbox
             if not <| map.ContainsKey token then map.Add(token, fld.Name))
         map
