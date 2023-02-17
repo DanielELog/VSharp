@@ -1,10 +1,307 @@
 namespace VSharp.Concolic
 
+open System.Runtime.InteropServices
 open VSharp
 open System.Reflection
 open System.Reflection.Emit
 open System.Collections.Generic
 open VSharp.Interpreter.IL
+
+[<type: StructLayout(LayoutKind.Sequential, Pack=1, CharSet=CharSet.Ansi)>]
+type probes = {
+    mutable ldarg_0 : uint64
+    mutable ldarg_1 : uint64
+    mutable ldarg_2 : uint64
+    mutable ldarg_3 : uint64
+    mutable ldarg_S : uint64
+    mutable ldarg : uint64
+    mutable ldarga : uint64
+
+    mutable ldloc_0 : uint64
+    mutable ldloc_1 : uint64
+    mutable ldloc_2 : uint64
+    mutable ldloc_3 : uint64
+    mutable ldloc_S : uint64
+    mutable ldloc : uint64
+    mutable ldloca : uint64
+
+    mutable starg_S : uint64
+    mutable starg : uint64
+    mutable stloc_0 : uint64
+    mutable stloc_1 : uint64
+    mutable stloc_2 : uint64
+    mutable stloc_3 : uint64
+    mutable stloc_S : uint64
+    mutable stloc : uint64
+
+    mutable ldc : uint64
+    mutable dup : uint64
+    mutable pop : uint64
+
+    mutable brtrue : uint64
+    mutable brfalse : uint64
+    mutable switch : uint64
+
+    mutable unOp : uint64
+    mutable binOp : uint64
+    mutable execBinOp_4 : uint64
+    mutable execBinOp_8 : uint64
+    mutable execBinOp_f4 : uint64
+    mutable execBinOp_f8 : uint64
+    mutable execBinOp_p : uint64
+    mutable execBinOp_8_4 : uint64
+    mutable execBinOp_4_p : uint64
+    mutable execBinOp_p_4 : uint64
+    mutable execBinOp_4_ovf : uint64
+    mutable execBinOp_8_ovf : uint64
+    mutable execBinOp_f4_ovf : uint64
+    mutable execBinOp_f8_ovf : uint64
+    mutable execBinOp_p_ovf : uint64
+    mutable execBinOp_8_4_ovf : uint64
+    mutable execBinOp_4_p_ovf : uint64
+    mutable execBinOp_p_4_ovf : uint64
+
+    mutable ldind : uint64
+    mutable stind : uint64
+    mutable execStind_I1 : uint64
+    mutable execStind_I2 : uint64
+    mutable execStind_I4 : uint64
+    mutable execStind_I8 : uint64
+    mutable execStind_R4 : uint64
+    mutable execStind_R8 : uint64
+    mutable execStind_ref : uint64
+
+    mutable conv : uint64
+    mutable conv_Ovf : uint64
+
+    mutable newarr : uint64
+    mutable localloc : uint64
+    mutable ldobj : uint64
+    mutable ldstr : uint64
+    mutable ldtoken : uint64
+    mutable stobj : uint64
+    mutable initobj : uint64
+    mutable ldlen : uint64
+
+    mutable cpobj : uint64
+    mutable execCpobj : uint64
+    mutable cpblk : uint64
+    mutable execCpblk : uint64
+    mutable initblk : uint64
+    mutable execInitblk : uint64
+
+    mutable castclass : uint64
+    mutable isinst : uint64
+
+    mutable box : uint64
+    mutable unbox : uint64
+    mutable unboxAny : uint64
+
+    mutable ldfld : uint64
+    mutable ldflda : uint64
+    mutable stfld_4 : uint64
+    mutable stfld_8 : uint64
+    mutable stfld_f4 : uint64
+    mutable stfld_f8 : uint64
+    mutable stfld_p : uint64
+    mutable stfld_struct : uint64
+
+    mutable ldsfld : uint64
+    mutable ldsflda : uint64
+    mutable stsfld : uint64
+
+    mutable ldelema : uint64
+    mutable ldelem : uint64
+    mutable execLdelema : uint64
+    mutable execLdelem : uint64
+
+    mutable stelem : uint64
+    mutable execStelem_I : uint64
+    mutable execStelem_I1 : uint64
+    mutable execStelem_I2 : uint64
+    mutable execStelem_I4 : uint64
+    mutable execStelem_I8 : uint64
+    mutable execStelem_R4 : uint64
+    mutable execStelem_R8 : uint64
+    mutable execStelem_Ref : uint64
+    mutable execStelem_Struct : uint64
+
+    mutable ckfinite : uint64
+    mutable sizeof : uint64
+    mutable ldftn : uint64
+    mutable ldvirtftn : uint64
+    mutable arglist : uint64
+    mutable mkrefany : uint64
+
+    mutable enter : uint64
+    mutable enterMain : uint64
+    mutable leave : uint64
+    mutable leaveMain_0 : uint64
+    mutable leaveMain_4 : uint64
+    mutable leaveMain_8 : uint64
+    mutable leaveMain_f4 : uint64
+    mutable leaveMain_f8 : uint64
+    mutable leaveMain_p : uint64
+    mutable finalizeCall : uint64
+    mutable execCall : uint64
+    mutable call : uint64
+    mutable pushFrame : uint64
+    mutable callVirt : uint64
+    mutable newobj : uint64
+    mutable calli : uint64
+    mutable throw : uint64
+    mutable rethrow : uint64
+
+    mutable mem_p : uint64
+    mutable mem_1_idx : uint64
+    mutable mem_2_idx : uint64
+    mutable mem_4_idx : uint64
+    mutable mem_8_idx : uint64
+    mutable mem_f4_idx : uint64
+    mutable mem_f8_idx : uint64
+    mutable mem_p_idx : uint64
+    mutable mem2_4 : uint64
+    mutable mem2_8 : uint64
+    mutable mem2_f4 : uint64
+    mutable mem2_f8 : uint64
+//    mutable mem2_p : uint64
+    mutable mem2_8_4 : uint64
+//    mutable mem2_4_p : uint64
+//    mutable mem2_p_1 : uint64
+//    mutable mem2_p_2 : uint64
+//    mutable mem2_p_4 : uint64
+//    mutable mem2_p_8 : uint64
+//    mutable mem2_p_f4 : uint64
+//    mutable mem2_p_f8 : uint64
+//    mutable mem3_p_p_p : uint64
+//    mutable mem3_p_p_i1 : uint64
+//    mutable mem3_p_p_i2 : uint64
+//    mutable mem3_p_p_i4 : uint64
+//    mutable mem3_p_p_i8 : uint64
+//    mutable mem3_p_p_f4 : uint64
+//    mutable mem3_p_p_f8 : uint64
+//    mutable mem3_p_i1_p : uint64
+    mutable unmem_1 : uint64
+    mutable unmem_2 : uint64
+    mutable unmem_4 : uint64
+    mutable unmem_8 : uint64
+    mutable unmem_f4 : uint64
+    mutable unmem_f8 : uint64
+    mutable unmem_p : uint64
+
+    mutable dumpInstruction : uint64
+}
+with
+    member private x.Probe2str =
+        let map = System.Collections.Generic.Dictionary<uint64, string>()
+        typeof<probes>.GetFields() |> Seq.iter (fun fld -> map.Add(fld.GetValue x |> unbox, fld.Name))
+        map
+    member x.AddressToString (address : int64) =
+        let result = ref ""
+        if x.Probe2str.TryGetValue(uint64 address, result) then "probe_" + result.Value
+        else toString address
+
+[<type: StructLayout(LayoutKind.Sequential, Pack=1, CharSet=CharSet.Ansi)>]
+type signatureTokens = {
+    mutable void_sig : uint32
+    mutable bool_sig : uint32
+    mutable void_u1_sig : uint32
+    mutable void_u4_sig : uint32
+    mutable void_i_sig : uint32
+    mutable bool_i_sig : uint32
+    mutable bool_u2_sig : uint32
+    mutable i1_i1_sig : uint32
+    mutable i2_i1_sig : uint32
+    mutable i4_i1_sig : uint32
+    mutable i8_i1_sig : uint32
+    mutable r4_i1_sig : uint32
+    mutable r8_i1_sig : uint32
+    mutable i_i1_sig : uint32
+    mutable void_i_i1_sig : uint32
+    mutable void_i_i2_sig : uint32
+    mutable void_i_u2_sig : uint32
+    mutable void_i_i4_sig : uint32
+    mutable void_i_i8_sig : uint32
+    mutable void_i_r4_sig : uint32
+    mutable void_i_r8_sig : uint32
+    mutable void_i_i_sig : uint32
+    mutable void_i4_i4_sig : uint32
+    mutable void_i4_i_sig : uint32
+    mutable void_i8_i4_sig : uint32
+    mutable void_i8_i8_sig : uint32
+    mutable void_r4_r4_sig : uint32
+    mutable void_r8_r8_sig : uint32
+    mutable bool_i_i4_sig : uint32
+    mutable bool_i_i_sig : uint32
+    mutable void_i_i_i_sig : uint32
+    mutable void_i_i_i1_sig : uint32
+    mutable void_i_i_i2_sig : uint32
+    mutable void_i_i_i4_sig : uint32
+    mutable void_i_i_i8_sig : uint32
+    mutable void_i_i_r4_sig : uint32
+    mutable void_i_i_r8_sig : uint32
+    mutable void_i_i1_i_sig : uint32
+    mutable void_i1_i1_i1_sig : uint32
+    mutable void_i2_i1_i1_sig : uint32
+    mutable void_i4_i1_i1_sig : uint32
+    mutable void_i8_i1_i1_sig : uint32
+    mutable void_r4_i1_i1_sig : uint32
+    mutable void_r8_i1_i1_sig : uint32
+    mutable void_i_i1_i1_sig : uint32
+    mutable void_token_u2_bool_u4_u4_sig : uint32
+    mutable void_offset_sig : uint32
+    mutable void_u1_offset_sig : uint32
+    mutable void_u2_offset_sig : uint32
+    mutable void_i4_offset_sig : uint32
+    mutable void_i8_offset_sig : uint32
+    mutable void_r4_offset_sig : uint32
+    mutable void_r8_offset_sig : uint32
+    mutable void_i_offset_sig : uint32
+    mutable void_token_offset_sig : uint32
+    mutable void_i_i1_offset_sig : uint32
+    mutable void_i_i2_offset_sig : uint32
+    mutable void_i_i4_offset_sig : uint32
+    mutable void_i_i8_offset_sig : uint32
+    mutable void_i_r4_offset_sig : uint32
+    mutable void_i_r8_offset_sig : uint32
+    mutable void_i_i_offset_sig : uint32
+    mutable void_i_token_offset_sig : uint32
+    mutable void_i_i4_i4_offset_sig : uint32
+    mutable void_u2_i4_i4_offset_sig : uint32
+    mutable void_u2_i4_i_offset_sig : uint32
+    mutable void_u2_i8_i4_offset_sig : uint32
+    mutable void_u2_i8_i8_offset_sig : uint32
+    mutable void_u2_r4_r4_offset_sig : uint32
+    mutable void_u2_r8_r8_offset_sig : uint32
+    mutable void_u2_i_i_offset_sig : uint32
+    mutable void_u2_i_i4_offset_sig : uint32
+    mutable void_i_i_i_offset_sig : uint32
+    mutable void_i_i_i1_offset_sig : uint32
+    mutable void_i_i_i2_offset_sig : uint32
+    mutable void_i_i_i4_offset_sig : uint32
+    mutable void_i_i_i8_offset_sig : uint32
+    mutable void_i_i_r4_offset_sig : uint32
+    mutable void_i_i_r8_offset_sig : uint32
+    mutable void_i_i1_i_offset_sig : uint32
+    mutable void_token_u4_u4_u4_sig : uint32
+    mutable void_token_i_i_offset_sig : uint32
+    mutable void_token_i_i4_offset_sig : uint32
+    mutable void_token_i_i8_offset_sig : uint32
+    mutable void_token_i_r4_offset_sig : uint32
+    mutable void_token_i_r8_offset_sig : uint32
+    mutable void_token_token_bool_u2_offset_sig : uint32
+}
+with
+    member private x.SigToken2str =
+        let map = System.Collections.Generic.Dictionary<uint32, string>()
+        typeof<signatureTokens>.GetFields() |> Seq.iter (fun fld ->
+            let token : uint32 = fld.GetValue x |> unbox
+            if not <| map.ContainsKey token then map.Add(token, fld.Name))
+        map
+    member x.TokenToString (token : int32) =
+        let result = ref ""
+        if x.SigToken2str.TryGetValue(uint32 token, result) then result.Value
+        else "<UNKNOWN TOKEN!>"
 
 type Instrumenter(communicator : Communicator, entryPoint : MethodBase, probes : probes) =
     // TODO: should we consider executed assembly build options here?
@@ -345,7 +642,7 @@ type Instrumenter(communicator : Communicator, entryPoint : MethodBase, probes :
             match instr.opcode with
             | OpCode op ->
                 let prependTarget = if hasPrefix then &prefix else &instr
-                let dumpedInfo = x.rewriter.ILInstrToString probes instr
+                let dumpedInfo = __notImplemented__()
                 let idx = communicator.SendStringAndReadItsIndex dumpedInfo
                 x.PrependProbe(probes.dumpInstruction, [OpCodes.Ldc_I4, idx |> int |> Arg32], x.tokens.void_u4_sig, &prependTarget) |> ignore
                 let opcodeValue = LanguagePrimitives.EnumOfValue op.Value
@@ -1183,7 +1480,7 @@ type Instrumenter(communicator : Communicator, entryPoint : MethodBase, probes :
 
     member x.Instrument(body : rawMethodBody) =
         assert(x.rewriter = null)
-        x.tokens <- body.tokens
+        x.tokens <- __notImplemented__()
         // TODO: call Application.getMethod and take ILRewriter there!
         x.rewriter <- ILRewriter(body)
         x.m <- x.rewriter.Method
@@ -1192,9 +1489,7 @@ type Instrumenter(communicator : Communicator, entryPoint : MethodBase, probes :
                 Logger.trace "Instrumenting %s (token = %u)" (Reflection.methodToString x.m) body.properties.token
                 try
                     x.rewriter.Import()
-                    x.rewriter.PrintInstructions "before instrumentation" probes
                     x.PlaceProbes()
-                    x.rewriter.PrintInstructions "after instrumentation" probes
                     let result = x.rewriter.Export()
                     result
                 with e ->

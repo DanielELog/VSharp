@@ -241,7 +241,7 @@ type Communicator(pipeFile) =
         | Some bytes -> x.Deserialize<'a> bytes
         | None -> unexpectedlyTerminated()
 
-    member x.ReadProbes() = x.ReadStructure<probes>()
+    member x.ReadProbes() = __notImplemented__()
 
     member x.SendEntryPoint (moduleName : string) (metadataToken : int) =
         let moduleNameBytes = Encoding.Unicode.GetBytes moduleName
@@ -266,20 +266,18 @@ type Communicator(pipeFile) =
         | Some bytes ->
             let propertiesBytes, rest = Array.splitAt (Marshal.SizeOf typeof<rawMethodProperties>) bytes
             let properties = x.Deserialize<rawMethodProperties> propertiesBytes
-            let sizeOfSignatureTokens = Marshal.SizeOf typeof<signatureTokens>
+            let sizeOfSignatureTokens = __notImplemented__()
             if int properties.signatureTokensLength <> sizeOfSignatureTokens then
                 fail "Size of received signature tokens buffer mismatch the expected! Probably you've altered the client-side signatures, but forgot to alter the server-side structure (or vice-versa)"
-            let signatureTokenBytes, rest = Array.splitAt sizeOfSignatureTokens rest
             let assemblyNameBytes, rest = Array.splitAt (int properties.assemblyNameLength) rest
             let moduleNameBytes, rest = Array.splitAt (int properties.moduleNameLength) rest
-            let signatureTokens = x.Deserialize<signatureTokens> signatureTokenBytes
             let assemblyName = Encoding.Unicode.GetString(assemblyNameBytes)
             let moduleName = Encoding.Unicode.GetString(moduleNameBytes)
             let ilBytes, ehBytes  = Array.splitAt (int properties.ilCodeSize) rest
             let ehSize = Marshal.SizeOf typeof<rawExceptionHandler>
             let ehCount = Array.length ehBytes / ehSize
             let ehs = Array.init ehCount (fun i -> x.Deserialize<rawExceptionHandler>(ehBytes, i * ehSize))
-            {properties = properties; tokens = signatureTokens; assembly = assemblyName; moduleName = moduleName; il = ilBytes; ehs = ehs}
+            {properties = properties; assembly = assemblyName; moduleName = moduleName; il = ilBytes; ehs = ehs}
         | None -> unexpectedlyTerminated()
 
     member private x.ToUIntPtr =
