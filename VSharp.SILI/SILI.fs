@@ -409,6 +409,14 @@ type public SILI(options : SiliOptions) =
             reportFinished <- wrapOnTest onFinished None
             reportError <- wrapOnError onException None
             try
+                let initializeAndStartFuzzer ()  =
+                    async {
+                        let assemblyName = (Seq.head isolated).Module.Assembly.Location
+                        let interactor = Fuzzer.FuzzerInteractor(assemblyName, options.outputDirectory.FullName)
+                        for m in isolated do
+                            do! interactor.Fuzz(m.Module.FullyQualifiedName, m.MetadataToken)
+                    } |> Async.RunSynchronously
+
                 let initializeAndStart () =
                     let trySubstituteTypeParameters method =
                         let typeModel = typeModel.CreateEmpty()
@@ -435,10 +443,13 @@ type public SILI(options : SiliOptions) =
                     statistics.SetStatesCountGetter(fun () -> searcher.StatesCount)
                     if not initialStates.IsEmpty then
                         x.AnswerPobs initialStates
+                let fuzzerTask = Task.Run(initializeAndStartFuzzer)
                 let explorationTask = Task.Run(initializeAndStart)
+                let tasks = [|explorationTask; fuzzerTask|]
                 let finished =
-                    if hasTimeout then explorationTask.Wait(int (timeout * 1.5))
-                    else explorationTask.Wait(); true
+                    // if hasTimeout then Task.WaitAll(tasks, int(timeout * 1.5))
+                    // else Task.WaitAll(tasks); true
+                    Task.WaitAll(tasks); true
                 if not finished then Logger.warning "Execution was cancelled due to timeout"
             with
             | :? AggregateException as e ->

@@ -10,6 +10,7 @@
         <Compile Include="PrimitiveGenerator.fs" />
         <Compile Include="EnumGenerator.fs" />
         <Compile Include="ArrayGenerator.fs" />
+        <Compile Include="DelegateGenerator.fs" />
         <Compile Include="InterfaceGenerator.fs" />
         <Compile Include="ClassGenerator.fs" />
         <Compile Include="Generator.fs" />
