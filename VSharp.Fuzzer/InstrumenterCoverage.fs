@@ -1,4 +1,4 @@
-namespace VSharp.Concolic
+namespace VSharp.Fuzzer
 
 open VSharp
 open System.Reflection
