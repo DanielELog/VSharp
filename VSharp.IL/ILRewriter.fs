@@ -6,6 +6,129 @@ open VSharp
 open System.Runtime.InteropServices
 
 [<type: StructLayout(LayoutKind.Sequential, Pack=1, CharSet=CharSet.Ansi)>]
+type signatureTokensCov = {
+    mutable void_sig : uint32
+    mutable bool_sig : uint32
+    mutable i_sig : uint32
+    mutable void_u_sig : uint32
+    mutable void_u1_sig : uint32
+    mutable void_u4_sig : uint32
+    mutable void_i_sig : uint32
+    mutable bool_i_sig : uint32
+    mutable bool_u2_sig : uint32
+    mutable i1_i1_sig : uint32
+    mutable i2_i1_sig : uint32
+    mutable i4_i1_sig : uint32
+    mutable i8_i1_sig : uint32
+    mutable r4_i1_sig : uint32
+    mutable r8_i1_sig : uint32
+    mutable i_i1_sig : uint32
+    mutable void_i_i1_sig : uint32
+    mutable void_i_i2_sig : uint32
+    mutable void_i_u2_sig : uint32
+    mutable void_i_i4_sig : uint32
+    mutable void_i_i8_sig : uint32
+    mutable void_i_r4_sig : uint32
+    mutable void_i_r8_sig : uint32
+    mutable void_i_i_sig : uint32
+    mutable void_i1_size_sig : uint32
+    mutable bool_i_i4_sig : uint32
+    mutable bool_i_i_sig : uint32
+    mutable bool_i_i_i4_sig : uint32
+    mutable void_i_i_i_sig : uint32
+    mutable void_i_i_i1_sig : uint32
+    mutable void_i_i_i2_sig : uint32
+    mutable void_i_i_i4_sig : uint32
+    mutable void_i_i_i8_sig : uint32
+    mutable void_i_i_r4_sig : uint32
+    mutable void_i_i_r8_sig : uint32
+    mutable void_i1_i1_offset_sig : uint32
+    mutable void_i2_i1_offset_sig : uint32
+    mutable void_i4_i1_offset_sig : uint32
+    mutable void_i8_i1_offset_sig : uint32
+    mutable void_r4_i1_offset_sig : uint32
+    mutable void_r8_i1_offset_sig : uint32
+    mutable void_i8_i4_offset_sig : uint32
+    mutable void_i8_i8_offset_sig : uint32
+    mutable void_r4_r4_offset_sig : uint32
+    mutable void_r8_r8_offset_sig : uint32
+    mutable void_i_i1_i1_sig : uint32
+    mutable void_i_i4_i2_sig : uint32
+    mutable void_offset_sig : uint32
+    mutable void_u1_offset_sig : uint32
+    mutable void_u2_offset_sig : uint32
+    mutable void_i4_offset_sig : uint32
+    mutable void_i8_offset_sig : uint32
+    mutable void_r4_offset_sig : uint32
+    mutable void_r8_offset_sig : uint32
+    mutable void_i_offset_sig : uint32
+    mutable void_token_offset_sig : uint32
+    mutable void_size_offset_sig : uint32
+    mutable void_i4_i4_offset_sig : uint32
+    mutable void_i_i1_offset_sig : uint32
+    mutable void_i_i2_offset_sig : uint32
+    mutable void_i_i4_offset_sig : uint32
+    mutable void_i_i8_offset_sig : uint32
+    mutable void_i_r4_offset_sig : uint32
+    mutable void_i_r8_offset_sig : uint32
+    mutable void_i_i_offset_sig : uint32
+    mutable void_i_token_offset_sig : uint32
+    mutable void_i_u2_size_sig : uint32
+    mutable void_i_i4_i1_offset_sig : uint32
+    mutable void_i_i4_i2_offset_sig : uint32
+    mutable void_i_i4_i4_offset_sig : uint32
+    mutable void_i_i4_i8_offset_sig : uint32
+    mutable void_i_i4_r4_offset_sig : uint32
+    mutable void_i_i4_r8_offset_sig : uint32
+    mutable void_i_i4_i_offset_sig : uint32
+    mutable void_u2_i4_i4_offset_sig : uint32
+    mutable void_u2_i4_i_offset_sig : uint32
+    mutable void_u2_i8_i4_offset_sig : uint32
+    mutable void_u2_i8_i8_offset_sig : uint32
+    mutable void_u2_r4_r4_offset_sig : uint32
+    mutable void_u2_r8_r8_offset_sig : uint32
+    mutable void_u2_i_i_offset_sig : uint32
+    mutable void_u2_i_i4_offset_sig : uint32
+    mutable void_i_i_i_offset_sig : uint32
+    mutable void_i_i_i1_offset_sig : uint32
+    mutable void_i_i_i2_offset_sig : uint32
+    mutable void_i_i_i4_offset_sig : uint32
+    mutable void_i_i_i8_offset_sig : uint32
+    mutable void_i_i_r4_offset_sig : uint32
+    mutable void_i_i_r8_offset_sig : uint32
+    mutable void_i_i1_i_offset_sig : uint32
+    mutable void_i4_i_i4_offset_sig : uint32
+    mutable void_i4_i_i8_offset_sig : uint32
+    mutable void_i4_i_r4_offset_sig : uint32
+    mutable void_i4_i_r8_offset_sig : uint32
+    mutable void_i4_i_i_offset_sig : uint32
+    mutable void_token_i_i_offset_sig : uint32
+    mutable void_i_i_i_i4_offset_sig : uint32
+    mutable void_i_i_i1_i4_offset_sig : uint32
+    mutable void_i_i_i2_i4_offset_sig : uint32
+    mutable void_i_i_i4_i4_offset_sig : uint32
+    mutable void_i_i_i8_i4_offset_sig : uint32
+    mutable void_i_i_r4_i4_offset_sig : uint32
+    mutable void_i_i_r8_i4_offset_sig : uint32
+    mutable void_i4_i4_i_i_offset_sig : uint32
+    mutable void_i_i4_i_i_offset_sig : uint32
+    mutable void_token_token_bool_u2_offset_sig : uint32
+    mutable void_token_u4_u4_u4_u4_i1_sig : uint32
+    mutable void_token_u4_u2_bool_u4_u4_sig : uint32
+}
+with
+    member private x.SigToken2str =
+        let map = System.Collections.Generic.Dictionary<uint32, string>()
+        typeof<signatureTokensCov>.GetFields() |> Seq.iter (fun fld ->
+            let token : uint32 = fld.GetValue x |> unbox
+            if not <| map.ContainsKey token then map.Add(token, fld.Name))
+        map
+    member x.TokenToString (token : int32) =
+        let result = ref ""
+        if x.SigToken2str.TryGetValue(uint32 token, result) then result.Value
+        else "<UNKNOWN TOKEN!>"
+
+[<type: StructLayout(LayoutKind.Sequential, Pack=1, CharSet=CharSet.Ansi)>]
 type rawMethodProperties = {
     mutable token : uint32
     mutable ilCodeSize : uint32
