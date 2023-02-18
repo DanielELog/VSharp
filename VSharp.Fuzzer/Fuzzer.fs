@@ -74,6 +74,7 @@ type Fuzzer ()  =
 
     member private this.FuzzOnce (methodInfo: FuzzingMethodInfo) (rnd: Random) =
         try
+            Logger.error $"Try fuzz once"
             let method = methodInfo.Method
             let args = methodInfo.ArgsInfo |> Array.map (fun (config, t) -> this.Generator rnd config t, t)
             let mutable obj = null
@@ -85,15 +86,19 @@ type Fuzzer ()  =
 
             try
                 let returned = method.Invoke(obj, Array.map fst args)
+                Logger.error $"Fuzzed succ"
                 Returned (argsWithThis, returned) |> Some
             with
-            | e -> Thrown (argsWithThis, e) |> Some
+            | :? TargetInvocationException as e -> Logger.error $"Fuzzed succ"; Thrown (argsWithThis, e.InnerException) |> Some
         with
-            | e -> None
+            | e ->
+                Logger.error $"Fuzzed failed with: {e.Message}"
+                None
+
     member this.FuzzOnceWithTimeout (methodInfo: FuzzingMethodInfo) (rnd: Random) =
         let fuzzOnce = System.Threading.Tasks.Task.Run(fun () -> this.FuzzOnce methodInfo rnd)
         let finished = fuzzOnce.Wait(this.Config.Timeout)
-        if finished then fuzzOnce.Result else None
+        if finished then fuzzOnce.Result else Logger.error "Time limit"; None
 
 //    pc -- Empty
 //    evaluationStack -- Result (in case of generation), Empty (in case of seed)
@@ -191,7 +196,7 @@ type Fuzzer ()  =
         let rndGenerator = Random(seed)
         [0..this.Config.MaxTest]
         |> List.map (fun _ -> Random(rndGenerator.Next() |> int))
-        |> List.map (this.FuzzOnce info)
+        |> List.map (this.FuzzOnceWithTimeout info)
         |> List.choose id
         |> List.map this.FuzzingResultToCompletedState
         |> Seq.ofList

@@ -1,5 +1,6 @@
 namespace VSharp.Fuzzer
 
+open System
 open System.Diagnostics
 open System.IO
 open System.IO.Pipes
@@ -27,29 +28,46 @@ type private FuzzerPipeClient () =
 
     do
         io.Connect()
-        printfn "Connected!"
+        Logger.error "Connected!"
         writer.AutoFlush <- true
 
     member this.SendMessage msg =
-        writer.WriteAsync (Message.serialize msg)
-        |> Async.AwaitTask
+        async {
+            do! writer.WriteAsync $"{Message.serialize msg}\n" |> Async.AwaitTask
+        }
 
 type FuzzerInteractor (pathToAssembly, outputDir) =
+
     let proc =
         let config =
             let info = ProcessStartInfo()
             info.FileName <- "dotnet"
-            info.Arguments <- $"/home/viktor/RiderProjects/VSharp/VSharp.Fuzzer/bin/Debug/net6.0/VSharp.Fuzzer.dll %s{pathToAssembly} %s{outputDir}"
+            info.Arguments <- $"/home/viktor/RiderProjects/VSharp/VSharp.Fuzzer/bin/Release/net6.0/VSharp.Fuzzer.dll %s{pathToAssembly} %s{outputDir}"
             info.UseShellExecute <- false
             info.RedirectStandardInput <- false
             info.RedirectStandardOutput <- false
             info.RedirectStandardError <- false
             info
-        printfn "Started!"
+        Logger.error "Started!"
         Process.Start(config)
-
 
     let client = FuzzerPipeClient()
     member this.Fuzz (moduleName: string, methodToken: int) = client.SendMessage (Fuzz (moduleName, methodToken))
-    member this.Kill () = proc.Kill ()
+    member this.Wait () =
+        async {
+            do! client.SendMessage Kill
+            Logger.error "Kill sent"
+            do! proc.WaitForExitAsync () |> Async.AwaitTask
+            Logger.error "Exited"
+        }
 
+    member this.Kill () = Logger.error "Dispose"; proc.Kill ()
+
+
+type ProcessTask (act, proc: Process) =
+    inherit System.Threading.Tasks.Task(act)
+
+    interface IDisposable with
+        member this.Dispose () =
+            (this :> System.Threading.Tasks.Task).Dispose ()
+            proc.Kill ()

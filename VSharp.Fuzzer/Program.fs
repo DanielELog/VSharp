@@ -48,6 +48,7 @@ type FuzzerPipeServer () =
     member this.ReadMessage () =
         async {
             let! str = reader.ReadLineAsync() |> Async.AwaitTask
+            Logger.error $"Recived raw msg: {str}"
             return Message.deserialize str
         }
 
@@ -55,8 +56,9 @@ type FuzzerApplication (assembly, outputDir) =
     let fuzzer = Fuzzer ()
     let server = FuzzerPipeServer ()
     member this.Start () =
-        let loop () =
+        let rec loop () =
             async {
+                Logger.error $"Try to read message"
                 let! command = server.ReadMessage()
                 Logger.error $"Received {command}"
                 match command with
@@ -70,19 +72,26 @@ type FuzzerApplication (assembly, outputDir) =
                     |> Seq.map (fun x -> TestGenerator.state2test false method None (makeCilState method x) "")
                     |> Seq.iteri (fun i x ->
                         Logger.error $"Saved to {outputDir}{Path.DirectorySeparatorChar}fuzzer_test{i}.vst"
-                        x.Value.Serialize $"{outputDir}{Path.DirectorySeparatorChar}fuzzer_test{i}.vst")
+                        x.Value.Serialize $"{outputDir}{Path.DirectorySeparatorChar}fuzzer_test{i}.vst"
+                    )
+                    do! loop ()
                 | Kill -> ()
             }
+        Logger.error "Loop started"
         loop()
 
 [<EntryPoint>]
 let main argv =
-
-    Console.SetOut (new StreamWriter (File.OpenWrite ("/home/viktor/Desktop/fuzzer.log")))
-    Logger.error $"PID: {Process.GetCurrentProcess().Id}"
-    Logger.error "Fuzzer started!"
     let assembly = getAssembly argv
     let outputDir = getOutputDir argv
+    let logName = outputDir.Split Path.DirectorySeparatorChar |> Seq.last
+    let out = new StreamWriter (File.OpenWrite ($"/home/viktor/Desktop/FuzzerLogs/{logName}.log"))
+    Console.SetOut out
+    Console.SetError out
+    Logger.error $"PID: {Process.GetCurrentProcess().Id}"
+    Logger.error "Fuzzer started!"
+
     let app = FuzzerApplication (assembly, outputDir)
+    Logger.error "App created"
     app.Start() |> Async.RunSynchronously
     0
