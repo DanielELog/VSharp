@@ -551,7 +551,7 @@ type InstrumenterCoverage(communicator : ICommunicator, entryPoint : MethodBase,
         if t = typeof<System.InvalidProgramException> || t = typeof<System.TypeLoadException> || t = typeof<System.BadImageFormatException> then
             internalfailf "Incorrect instrumentation: exception %O is thrown!" t
         let result =
-            if x.ShouldInstrument && Instrumenter.instrumentedFunctions.Add x.m then
+            if x.ShouldInstrument && InstrumenterCoverage.instrumentedFunctions.Add x.m then
                 Logger.trace "Instrumenting %s (token = %u)" (Reflection.methodToString x.m) body.properties.token
                 try
                     x.rewriter.Import()
