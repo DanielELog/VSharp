@@ -6,7 +6,7 @@ open VSharp
 open System.Runtime.InteropServices
 
 [<type: StructLayout(LayoutKind.Sequential, Pack=1, CharSet=CharSet.Ansi)>]
-type signatureTokensCov = {
+type signatureTokens = {
     mutable void_sig : uint32
     mutable bool_sig : uint32
     mutable i_sig : uint32
