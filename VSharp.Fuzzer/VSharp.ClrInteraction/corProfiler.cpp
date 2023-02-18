@@ -1,6 +1,11 @@
 #include "corProfiler.h"
 #include "corhlpr.h"
-#include "profiler_pal.h"
+#ifdef UNIX
+#include "profiler_unix.h"
+#endif
+#ifdef WIN32
+#include "profiler_win.h"
+#endif
 #include "logging.h"
 #include "instrumenter.h"
 #include "communication/protocol.h"
@@ -8,7 +13,32 @@
 
 #define UNUSED(x) (void)x
 
+vsharp::Instrumenter* instr = nullptr;
+
+unsigned AddString(char *string) {
+    return vsharp::allocateString(string);
+}
+mdToken FieldRefTypeToken(mdToken fieldRef) {
+    return instr->FieldRefTypeToken(fieldRef);
+}
+mdToken FieldDefTypeToken(mdToken fieldDef) {
+    return instr->FieldDefTypeToken(fieldDef);
+}
+mdToken ArgTypeToken(mdToken method, INT32 argIndex) {
+    return instr->ArgTypeToken(method, argIndex);
+}
+mdToken LocalTypeToken(INT32 localIndex) {
+    return instr->LocalTypeToken(localIndex);
+}
+mdToken ReturnTypeToken() {
+    return instr->ReturnTypeToken();
+}
+mdToken DeclaringTypeToken(mdToken method) {
+    return instr->DeclaringTypeToken(method);
+}
+
 using namespace vsharp;
+
 
 CorProfiler::CorProfiler() : refCount(0), corProfilerInfo(nullptr), instrumenter(nullptr)
 {
@@ -64,10 +94,10 @@ HRESULT STDMETHODCALLTYPE CorProfiler::Initialize(IUnknown *pICorProfilerInfoUnk
     currentThread = currentThreadGetter;
 
     protocol = new vsharp::Protocol();
-    if (!protocol->startSession()) return E_FAIL;
 
     instrumenter = new Instrumenter(*corProfilerInfo, *protocol);
-    instrumenter->configureEntryPoint();
+
+    instr = instrumenter;
 
     return S_OK;
 }
@@ -86,8 +116,6 @@ HRESULT STDMETHODCALLTYPE CorProfiler::Shutdown()
         this->corProfilerInfo = nullptr;
         delete instrumenter;
     }
-
-    if (!protocol->shutdown()) return E_FAIL;
 
     return S_OK;
 }
@@ -212,16 +240,18 @@ HRESULT STDMETHODCALLTYPE CorProfiler::FunctionUnloadStarted(FunctionID function
 #include<iostream>
 #include <vector>
 
+bool jitInProcess = false;
+
 HRESULT STDMETHODCALLTYPE CorProfiler::JITCompilationStarted(FunctionID functionId, BOOL fIsSafeToBlock)
 {
-//    ClassID pClassId;
-//    ModuleID pModuleId;
-//    mdToken pToken;
-//    this->corProfilerInfo->GetFunctionInfo(functionId, &pClassId, &pModuleId, &pToken);
-//    std::cout << __FUNCTION__ << " " << std::hex << pToken << std::dec << std::endl;
     UNUSED(fIsSafeToBlock);
+//    LOG(tout << "JITCompilationStarted, threadID = " << currentThread() << std::endl);
 
-    return instrumenter->instrument(functionId);
+//    if (jitInProcess) FAIL_LOUD("Handling JIT event, when previous was not finished!");
+//    jitInProcess = true;
+    HRESULT hr = instrumenter->instrument(functionId, false);
+//    jitInProcess = false;
+    return hr;
 //    return S_OK;
 }
 
@@ -236,8 +266,7 @@ HRESULT STDMETHODCALLTYPE CorProfiler::JITCompilationFinished(FunctionID functio
 
 HRESULT STDMETHODCALLTYPE CorProfiler::JITCachedFunctionSearchStarted(FunctionID functionId, BOOL *pbUseCachedFunction)
 {
-//    std::cout << __FUNCTION__ << " (method name "<< instrumenter->temp_fid_toString(functionId) << ")" << std::endl;
-    std::cout << __FUNCTION__ << std::endl;
+    LOG(tout << __FUNCTION__ << std::endl);
     UNUSED(functionId);
     UNUSED(pbUseCachedFunction);
     return S_OK;
@@ -245,7 +274,7 @@ HRESULT STDMETHODCALLTYPE CorProfiler::JITCachedFunctionSearchStarted(FunctionID
 
 HRESULT STDMETHODCALLTYPE CorProfiler::JITCachedFunctionSearchFinished(FunctionID functionId, COR_PRF_JIT_CACHE result)
 {
-    std::cout << __FUNCTION__ << std::endl;
+    LOG(tout << __FUNCTION__ << std::endl);
     UNUSED(functionId);
     UNUSED(result);
     return S_OK;
@@ -253,14 +282,14 @@ HRESULT STDMETHODCALLTYPE CorProfiler::JITCachedFunctionSearchFinished(FunctionI
 
 HRESULT STDMETHODCALLTYPE CorProfiler::JITFunctionPitched(FunctionID functionId)
 {
-    std::cout << __FUNCTION__ << std::endl;
+    LOG(tout << __FUNCTION__ << std::endl);
     UNUSED(functionId);
     return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CorProfiler::JITInlining(FunctionID callerId, FunctionID calleeId, BOOL *pfShouldInline)
 {
-    std::cout << __FUNCTION__ << std::endl;
+    LOG(tout << __FUNCTION__ << std::endl);
     UNUSED(callerId);
     UNUSED(calleeId);
     UNUSED(pfShouldInline);
@@ -421,7 +450,7 @@ void CorProfiler::resolveType(ClassID classId, std::vector<bool> &isValid, std::
     CorElementType corElementType;
     ClassID elementType;
     ULONG rank;
-    HRESULT hr = this->corProfilerInfo->IsArrayClass(classId, &corElementType, &elementType, &rank);
+    HRESULT hr = corProfilerInfo->IsArrayClass(classId, &corElementType, &elementType, &rank);
     if (hr == S_OK) {
         isValid.push_back(true);
         isArray.push_back(true);
@@ -440,7 +469,6 @@ void CorProfiler::resolveType(ClassID classId, std::vector<bool> &isValid, std::
             isValid.push_back(true);
             isArray.push_back(false);
 
-            delete[] typeArgs;
             typeArgs = new ClassID[typeArgsNum];
             if (FAILED(this->corProfilerInfo->GetClassIDInfo2(classId, &moduleId, &token, &parent, typeArgsNum, &typeArgsNum, typeArgs))) FAIL_LOUD("getting generic type info failed!");
             tokens.push_back(token);
@@ -451,7 +479,6 @@ void CorProfiler::resolveType(ClassID classId, std::vector<bool> &isValid, std::
             auto moduleName = new WCHAR[0];
             AssemblyID assemblyId;
             if (FAILED(this->corProfilerInfo->GetModuleInfo(moduleId, &pBaseLoadAddress, 0, &moduleSize, moduleName, &assemblyId))) FAIL_LOUD("getting module info failed");
-            delete[] moduleName;
             moduleName = new WCHAR[moduleSize];
             if (FAILED(this->corProfilerInfo->GetModuleInfo(moduleId, &pBaseLoadAddress, moduleSize, &moduleSize, moduleName, &assemblyId))) FAIL_LOUD("getting module info failed");
             moduleSizes.push_back((int) moduleSize * (int) sizeof(WCHAR));
@@ -464,7 +491,6 @@ void CorProfiler::resolveType(ClassID classId, std::vector<bool> &isValid, std::
             AppDomainID appDomainId;
             ModuleID assemblyModuleId;
             if (FAILED(this->corProfilerInfo->GetAssemblyInfo(assemblyId, 0, &assemblySize, assemblyName, &appDomainId, &assemblyModuleId))) FAIL_LOUD("getting assembly info failed");
-            delete[] assemblyName;
             assemblyName = new WCHAR[assemblySize];
             if (FAILED(this->corProfilerInfo->GetAssemblyInfo(assemblyId, assemblySize, &assemblySize, assemblyName, &appDomainId, &assemblyModuleId))) FAIL_LOUD("getting assembly info failed");
             assemblySizes.push_back((int) assemblySize * (int) sizeof(WCHAR));
@@ -498,14 +524,14 @@ void CorProfiler::serializeType(const std::vector<bool> &isValid, const std::vec
     typeLength = isValidSize * sizeof(BYTE) + isArraySize * sizeof(BYTE) + arrayTypesSize * (sizeof(BYTE) + sizeof(INT32)) + tokensSize * sizeof(INT32) + typeArgsCountSize * sizeof(INT32) + moduleNamesSize * sizeof(WCHAR) + moduleSizesSize * sizeof(INT32) + assemblyNamesSize * sizeof(WCHAR) + assemblySizesSize * sizeof(INT32);
     type = new char[typeLength];
     char *begin = type;
-    auto moduleNamesPtr = (char *) moduleNames.data();
-    auto assemblyNamesPtr = (char *) assemblyNames.data();
+    char *moduleNamesPtr = (char *) moduleNames.data();
+    char *assemblyNamesPtr = (char *) assemblyNames.data();
     int arrayTypeIndex = 0;
     int validObjectIndex = 0;
     int tokenIndex = 0;
     for (bool valid: isValid) {
         auto checkValidPtr = (BYTE *)type;
-        *checkValidPtr = (BYTE) valid; type += sizeof(BYTE);
+        *checkValidPtr = (BYTE) (valid ? 1 : 0); type += sizeof(BYTE);
         if (valid) { // TODO: delete valid option! #do
             auto arrayCheckPtr = (BYTE *)type;
             bool arrayCheck = isArray[validObjectIndex];
@@ -549,6 +575,7 @@ HRESULT STDMETHODCALLTYPE CorProfiler::ObjectAllocated(ObjectID objectId, ClassI
     ULONG size;
     this->corProfilerInfo->GetObjectSize(objectId, &size);
 
+    // TODO: type caching to reuse already allocated types
     char *type = new char[0];
     unsigned long typeLength = 0;
 
@@ -564,7 +591,7 @@ HRESULT STDMETHODCALLTYPE CorProfiler::ObjectAllocated(ObjectID objectId, ClassI
     resolveType(classId, isValid, isArray, arrayTypes, tokens, typeArgsCount, moduleNames, nameLengths, assemblyNames, assemblySizes);
     serializeType(isValid, isArray, arrayTypes, tokens, typeArgsCount, moduleNames, nameLengths, type, typeLength, assemblyNames, assemblySizes);
 
-    heap.allocateObject(objectId, size, type, typeLength);
+    heap.allocateObject(objectId, size, type, typeLength, isArray[0]);
     return S_OK;
 }
 
@@ -656,87 +683,117 @@ HRESULT STDMETHODCALLTYPE CorProfiler::ExceptionThrown(ObjectID thrownObjectId)
     // }
     // printf("\n");
 
-    std::cout << "EXCEPTION THROWN!!1!!!1!" << std::endl;
+    LOG(tout << "EXCEPTION THROWN!" << std::endl);
     UNUSED(thrownObjectId);
     return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CorProfiler::ExceptionSearchFunctionEnter(FunctionID functionId)
 {
-    std::cout << "EXCEPTION Search function enter" << std::endl;
+    LOG(tout << "EXCEPTION Search function enter" << std::endl);
     UNUSED(functionId);
     return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CorProfiler::ExceptionSearchFunctionLeave()
 {
-    std::cout << "EXCEPTION Search function leave" << std::endl;
+    LOG(tout << "EXCEPTION Search function leave" << std::endl);
+    // TODO: use for filter support
     return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CorProfiler::ExceptionSearchFilterEnter(FunctionID functionId)
 {
-    std::cout << "EXCEPTION Search filter enter" << std::endl;
+    LOG(tout << "EXCEPTION Search filter enter" << std::endl);
+
+    if (isMainEntered()) {
+        // TODO: support filter: modify ip, because need to execute lower frames, but do not need to pop them
+        ExceptionKind kind;
+        OBJID exceptionRef;
+        bool isConcrete;
+        std::tie(kind, exceptionRef, isConcrete) = exceptionRegister();
+        FAIL_LOUD("Filter is not supported");
+    }
     UNUSED(functionId);
     return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CorProfiler::ExceptionSearchFilterLeave()
 {
-    std::cout << "EXCEPTION Search filter leave" << std::endl;
+    LOG(tout << "EXCEPTION Search filter leave" << std::endl);
+    if (isMainEntered()) {
+        // TODO: support filter
+        FAIL_LOUD("Filter is not supported");
+    }
     return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CorProfiler::ExceptionSearchCatcherFound(FunctionID functionId)
 {
-    std::cout << "EXCEPTION Search catcher found" << std::endl;
+    LOG(tout << "EXCEPTION Search catcher found" << std::endl);
     UNUSED(functionId);
     return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CorProfiler::ExceptionOSHandlerEnter(UINT_PTR ptr)
 {
-    std::cout << "EXCEPTION OS HANDLER ENTER!" << std::endl;
+    LOG(tout << "EXCEPTION OS HANDLER ENTER!" << std::endl);
     UNUSED(ptr);
     return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CorProfiler::ExceptionOSHandlerLeave(UINT_PTR ptr)
 {
-    std::cout << "EXCEPTION OS HANDLER LEAVE!" << std::endl;
+    LOG(tout << "EXCEPTION OS HANDLER LEAVE!" << std::endl);
     UNUSED(ptr);
     return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CorProfiler::ExceptionUnwindFunctionEnter(FunctionID functionId)
 {
-    std::cout << "EXCEPTION UNWIND FUNCTION ENTER!" << std::endl;
+    LOG(tout << "EXCEPTION UNWIND FUNCTION ENTER!" << std::endl);
     UNUSED(functionId);
     return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CorProfiler::ExceptionUnwindFunctionLeave()
 {
-    std::cout << "EXCEPTION UNWIND FUNCTION LEAVE!" << std::endl;
+    LOG(tout << "EXCEPTION UNWIND FUNCTION LEAVE!" << std::endl);
+    if (isMainEntered()) {
+        Stack &s = stack();
+        if (s.framesCount() == 1) {
+            // NOTE: sending command to end SILI execution
+            Protocol::sendTerminateByExceptionCommand();
+        }
+        // NOTE: popping stack frame
+        s.popFrame();
+    }
     return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CorProfiler::ExceptionUnwindFinallyEnter(FunctionID functionId)
 {
-    std::cout << "EXCEPTION UNWIND FINALLY ENTER!" << std::endl;
+    LOG(tout << "EXCEPTION UNWIND FINALLY ENTER!" << std::endl);
     UNUSED(functionId);
     return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CorProfiler::ExceptionUnwindFinallyLeave()
 {
-    std::cout << "EXCEPTION UNWIND FINALLY LEAVE!" << std::endl;
+    LOG(tout << "EXCEPTION UNWIND FINALLY LEAVE!" << std::endl);
     return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CorProfiler::ExceptionCatcherEnter(FunctionID functionId, ObjectID objectId)
 {
-    std::cout << "EXCEPTION CATCHER ENTER!" << std::endl;
+    LOG(tout << "EXCEPTION CATCHER ENTER!" << std::endl);
+    if (isMainEntered()) {
+        ExceptionKind kind;
+        OBJID exceptionRef;
+        bool isConcrete;
+        std::tie(kind, exceptionRef, isConcrete) = exceptionRegister();
+        catchException();
+    }
     UNUSED(functionId);
     UNUSED(objectId);
     return S_OK;
@@ -744,7 +801,7 @@ HRESULT STDMETHODCALLTYPE CorProfiler::ExceptionCatcherEnter(FunctionID function
 
 HRESULT STDMETHODCALLTYPE CorProfiler::ExceptionCatcherLeave()
 {
-    std::cout << "EXCEPTION CATCHER Leave!" << std::endl;
+    LOG(tout << "EXCEPTION CATCHER Leave!" << std::endl);
     return S_OK;
 }
 
@@ -857,7 +914,10 @@ HRESULT STDMETHODCALLTYPE CorProfiler::ReJITCompilationStarted(FunctionID functi
     UNUSED(functionId);
     UNUSED(rejitId);
     UNUSED(fIsSafeToBlock);
-    return instrumenter->reInstrument(functionId);
+//    getLock();
+    HRESULT hr = instrumenter->reInstrument(functionId);
+//    freeLock();
+    return hr;
 }
 
 HRESULT STDMETHODCALLTYPE CorProfiler::GetReJITParameters(ModuleID moduleId, mdMethodDef methodId, ICorProfilerFunctionControl *pFunctionControl)

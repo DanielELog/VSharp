@@ -1,7 +1,7 @@
 #include "instrumenter.h"
-#include "communication/protocol.h"
 #include "logging.h"
 #include "cComPtr.h"
+#include "reflection.h"
 #include <vector>
 #include <stdexcept>
 #include <corhlpr.cpp>
@@ -21,6 +21,7 @@ using namespace vsharp;
 #define ELEMENT_TYPE_COND ELEMENT_TYPE_I
 #define ELEMENT_TYPE_TOKEN ELEMENT_TYPE_U4
 #define ELEMENT_TYPE_OFFSET ELEMENT_TYPE_I4
+#define ELEMENT_TYPE_SIZE ELEMENT_TYPE_U
 
 struct MethodBodyInfo {
     unsigned token;
@@ -65,6 +66,8 @@ HRESULT initTokens(const CComPtr<IMetaDataEmit> &metadataEmit, std::vector<mdSig
     mdSignature signatureToken;
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x00, ELEMENT_TYPE_VOID)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x00, ELEMENT_TYPE_COND)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x00, ELEMENT_TYPE_I)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x01, ELEMENT_TYPE_VOID, ELEMENT_TYPE_U)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x01, ELEMENT_TYPE_VOID, ELEMENT_TYPE_U1)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x01, ELEMENT_TYPE_VOID, ELEMENT_TYPE_U4)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x01, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I)
@@ -85,14 +88,10 @@ HRESULT initTokens(const CComPtr<IMetaDataEmit> &metadataEmit, std::vector<mdSig
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x02, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_R4)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x02, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_R8)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x02, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I)
-    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x02, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I4, ELEMENT_TYPE_I4)
-    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x02, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I4, ELEMENT_TYPE_I)
-    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x02, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I8, ELEMENT_TYPE_I4)
-    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x02, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I8, ELEMENT_TYPE_I8)
-    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x02, ELEMENT_TYPE_VOID, ELEMENT_TYPE_R4, ELEMENT_TYPE_R4)
-    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x02, ELEMENT_TYPE_VOID, ELEMENT_TYPE_R8, ELEMENT_TYPE_R8)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x02, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I1, ELEMENT_TYPE_SIZE)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x02, ELEMENT_TYPE_COND, ELEMENT_TYPE_I, ELEMENT_TYPE_I4)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x02, ELEMENT_TYPE_COND, ELEMENT_TYPE_I, ELEMENT_TYPE_I)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_COND, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_I4)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_I)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_I1)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_I2)
@@ -100,15 +99,18 @@ HRESULT initTokens(const CComPtr<IMetaDataEmit> &metadataEmit, std::vector<mdSig
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_I8)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_R4)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_R8)
-    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I1, ELEMENT_TYPE_I)
-    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I1, ELEMENT_TYPE_I1, ELEMENT_TYPE_I1)
-    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I2, ELEMENT_TYPE_I1, ELEMENT_TYPE_I1)
-    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I4, ELEMENT_TYPE_I1, ELEMENT_TYPE_I1)
-    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I8, ELEMENT_TYPE_I1, ELEMENT_TYPE_I1)
-    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_R4, ELEMENT_TYPE_I1, ELEMENT_TYPE_I1)
-    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_R8, ELEMENT_TYPE_I1, ELEMENT_TYPE_I1)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I1, ELEMENT_TYPE_I1, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I2, ELEMENT_TYPE_I1, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I4, ELEMENT_TYPE_I1, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I8, ELEMENT_TYPE_I1, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_R4, ELEMENT_TYPE_I1, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_R8, ELEMENT_TYPE_I1, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I8, ELEMENT_TYPE_I4, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I8, ELEMENT_TYPE_I8, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_R4, ELEMENT_TYPE_R4, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_R8, ELEMENT_TYPE_R8, ELEMENT_TYPE_OFFSET)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I1, ELEMENT_TYPE_I1)
-    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x05, ELEMENT_TYPE_VOID, ELEMENT_TYPE_TOKEN, ELEMENT_TYPE_U2, ELEMENT_TYPE_BOOLEAN, ELEMENT_TYPE_U4, ELEMENT_TYPE_U4)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I4, ELEMENT_TYPE_I2)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x01, ELEMENT_TYPE_VOID, ELEMENT_TYPE_OFFSET)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x02, ELEMENT_TYPE_VOID, ELEMENT_TYPE_U1, ELEMENT_TYPE_OFFSET)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x02, ELEMENT_TYPE_VOID, ELEMENT_TYPE_U2, ELEMENT_TYPE_OFFSET)
@@ -118,6 +120,8 @@ HRESULT initTokens(const CComPtr<IMetaDataEmit> &metadataEmit, std::vector<mdSig
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x02, ELEMENT_TYPE_VOID, ELEMENT_TYPE_R8, ELEMENT_TYPE_OFFSET)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x02, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_OFFSET)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x02, ELEMENT_TYPE_VOID, ELEMENT_TYPE_TOKEN, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x02, ELEMENT_TYPE_VOID, ELEMENT_TYPE_SIZE, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I4, ELEMENT_TYPE_I4, ELEMENT_TYPE_OFFSET)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I1, ELEMENT_TYPE_OFFSET)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I2, ELEMENT_TYPE_OFFSET)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I4, ELEMENT_TYPE_OFFSET)
@@ -126,7 +130,14 @@ HRESULT initTokens(const CComPtr<IMetaDataEmit> &metadataEmit, std::vector<mdSig
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_R8, ELEMENT_TYPE_OFFSET)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_OFFSET)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_TOKEN, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_U2, ELEMENT_TYPE_SIZE)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I4, ELEMENT_TYPE_I1, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I4, ELEMENT_TYPE_I2, ELEMENT_TYPE_OFFSET)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I4, ELEMENT_TYPE_I4, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I4, ELEMENT_TYPE_I8, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I4, ELEMENT_TYPE_R4, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I4, ELEMENT_TYPE_R8, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I4, ELEMENT_TYPE_I, ELEMENT_TYPE_OFFSET)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_U2, ELEMENT_TYPE_I4, ELEMENT_TYPE_I4, ELEMENT_TYPE_OFFSET)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_U2, ELEMENT_TYPE_I4, ELEMENT_TYPE_I, ELEMENT_TYPE_OFFSET)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_U2, ELEMENT_TYPE_I8, ELEMENT_TYPE_I4, ELEMENT_TYPE_OFFSET)
@@ -143,13 +154,24 @@ HRESULT initTokens(const CComPtr<IMetaDataEmit> &metadataEmit, std::vector<mdSig
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_R4, ELEMENT_TYPE_OFFSET)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_R8, ELEMENT_TYPE_OFFSET)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I1, ELEMENT_TYPE_I, ELEMENT_TYPE_OFFSET)
-    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_TOKEN, ELEMENT_TYPE_U4, ELEMENT_TYPE_U4, ELEMENT_TYPE_U4)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I4, ELEMENT_TYPE_I, ELEMENT_TYPE_I4, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I4, ELEMENT_TYPE_I, ELEMENT_TYPE_I8, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I4, ELEMENT_TYPE_I, ELEMENT_TYPE_R4, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I4, ELEMENT_TYPE_I, ELEMENT_TYPE_R8, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I4, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_OFFSET)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_TOKEN, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_OFFSET)
-    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_TOKEN, ELEMENT_TYPE_I, ELEMENT_TYPE_I4, ELEMENT_TYPE_OFFSET)
-    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_TOKEN, ELEMENT_TYPE_I, ELEMENT_TYPE_I8, ELEMENT_TYPE_OFFSET)
-    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_TOKEN, ELEMENT_TYPE_I, ELEMENT_TYPE_R4, ELEMENT_TYPE_OFFSET)
-    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x04, ELEMENT_TYPE_VOID, ELEMENT_TYPE_TOKEN, ELEMENT_TYPE_I, ELEMENT_TYPE_R8, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x05, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_I4, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x05, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_I1, ELEMENT_TYPE_I4, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x05, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_I2, ELEMENT_TYPE_I4, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x05, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_I4, ELEMENT_TYPE_I4, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x05, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_I8, ELEMENT_TYPE_I4, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x05, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_R4, ELEMENT_TYPE_I4, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x05, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_R8, ELEMENT_TYPE_I4, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x05, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I4, ELEMENT_TYPE_I4, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x05, ELEMENT_TYPE_VOID, ELEMENT_TYPE_I, ELEMENT_TYPE_I4, ELEMENT_TYPE_I, ELEMENT_TYPE_I, ELEMENT_TYPE_OFFSET)
     SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x05, ELEMENT_TYPE_VOID, ELEMENT_TYPE_TOKEN, ELEMENT_TYPE_TOKEN, ELEMENT_TYPE_BOOLEAN, ELEMENT_TYPE_U2, ELEMENT_TYPE_OFFSET)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x06, ELEMENT_TYPE_VOID, ELEMENT_TYPE_TOKEN, ELEMENT_TYPE_U4, ELEMENT_TYPE_U4, ELEMENT_TYPE_U4, ELEMENT_TYPE_U4, ELEMENT_TYPE_I1)
+    SIG_DEF(IMAGE_CEE_CS_CALLCONV_STDCALL, 0x06, ELEMENT_TYPE_VOID, ELEMENT_TYPE_TOKEN, ELEMENT_TYPE_U4, ELEMENT_TYPE_U2, ELEMENT_TYPE_BOOLEAN, ELEMENT_TYPE_U4, ELEMENT_TYPE_U4)
     return S_OK;
 }
 
@@ -342,24 +364,6 @@ HRESULT Instrumenter::exportIL(char *bytecode, unsigned codeLength, unsigned max
     return S_OK;
 }
 
-HRESULT Instrumenter::startReJitInstrumented() {
-    LOG(tout << "ReJIT of instrumented methods is started" << std::endl);
-    m_reJitInstrumentedStarted = true;
-    ULONG count = instrumentedFunctions.size();
-    auto *modules = new ModuleID[count];
-    auto *methods = new mdMethodDef[count];
-    int i = 0;
-    for (const auto &it : instrumentedFunctions) {
-        modules[i] = it.first.first;
-        methods[i] = it.first.second;
-        i++;
-    }
-    HRESULT hr = m_profilerInfo.RequestReJIT(count, modules, methods);
-    delete[] modules;
-    delete[] methods;
-    return hr;
-}
-
 HRESULT Instrumenter::startReJitSkipped() {
     LOG(tout << "ReJIT of skipped methods is started" << std::endl);
     ULONG count = skippedBeforeMain.size();
@@ -372,9 +376,58 @@ HRESULT Instrumenter::startReJitSkipped() {
         i++;
     }
     HRESULT hr = m_profilerInfo.RequestReJIT(count, modules, methods);
+    skippedBeforeMain.clear();
     delete[] modules;
     delete[] methods;
     return hr;
+}
+
+mdToken Instrumenter::FieldRefTypeToken(mdToken fieldRef) {
+    auto *reflection = new Reflection(m_profilerInfo);
+    reflection->configure(m_moduleId, m_jittedToken);
+    mdToken typeSpec = reflection->getTypeTokenFromFieldRef(fieldRef);
+    delete reflection;
+    return typeSpec;
+}
+
+mdToken Instrumenter::FieldDefTypeToken(mdToken fieldDef) {
+    auto *reflection = new Reflection(m_profilerInfo);
+    reflection->configure(m_moduleId, m_jittedToken);
+    mdToken typeSpec = reflection->getTypeTokenFromFieldDef(fieldDef);
+    delete reflection;
+    return typeSpec;
+}
+
+mdToken Instrumenter::ArgTypeToken(mdToken method, INT32 argIndex) {
+    auto *reflection = new Reflection(m_profilerInfo);
+    reflection->configure(m_moduleId, m_jittedToken);
+    mdToken typeSpec = reflection->getTypeTokenFromParameter(method, argIndex);
+    delete reflection;
+    return typeSpec;
+}
+
+mdToken Instrumenter::LocalTypeToken(INT32 localIndex) {
+    auto *reflection = new Reflection(m_profilerInfo);
+    reflection->configure(m_moduleId, m_jittedToken);
+    mdToken typeSpec = reflection->getTypeTokenFromLocal(m_tkLocalVarSig, localIndex);
+    delete reflection;
+    return typeSpec;
+}
+
+mdToken Instrumenter::ReturnTypeToken() {
+    auto *reflection = new Reflection(m_profilerInfo);
+    reflection->configure(m_moduleId, m_jittedToken);
+    mdToken typeToken = reflection->getTypeTokenOfReturnType(m_jittedToken);
+    delete reflection;
+    return typeToken;
+}
+
+mdToken Instrumenter::DeclaringTypeToken(mdToken method) {
+    auto *reflection = new Reflection(m_profilerInfo);
+    reflection->configure(m_moduleId, m_jittedToken);
+    mdToken typeToken = reflection->getTypeTokenOfDeclaringType(method);
+    delete reflection;
+    return typeToken;
 }
 
 HRESULT Instrumenter::doInstrumentation(ModuleID oldModuleId, const WCHAR *assemblyName, ULONG assemblyNameLength, const WCHAR *moduleName, ULONG moduleNameLength) {
@@ -384,24 +437,13 @@ HRESULT Instrumenter::doInstrumentation(ModuleID oldModuleId, const WCHAR *assem
     IfFailRet(m_profilerInfo.GetModuleMetaData(m_moduleId, ofRead | ofWrite, IID_IMetaDataImport, reinterpret_cast<IUnknown **>(&metadataImport)));
     IfFailRet(metadataImport->QueryInterface(IID_IMetaDataEmit, reinterpret_cast<void **>(&metadataEmit)));
 
-    // TODO: analyze the IL code instead to understand that we've injected functions?
-    if (instrumentedFunctions.find({m_moduleId, m_jittedToken}) != instrumentedFunctions.end()) {
-        LOG(tout << "Duplicate jitting of " << HEX(m_jittedToken) << std::endl);
-        return S_OK;
-    }
-    if (mainLeft()) {
-        if (!m_reJitInstrumentedStarted)
-            IfFailRet(startReJitInstrumented());
-        LOG(tout << "Main left! Skipping instrumentation of " << HEX(m_jittedToken) << std::endl);
-        return S_OK;
-    }
-
     if (oldModuleId != m_moduleId) {
         delete[] m_signatureTokens;
-        std::vector<mdSignature> *tokens = new std::vector<mdSignature>;
-        initTokens(metadataEmit, *tokens);
-        m_signatureTokensLength = tokens->size() * sizeof(mdSignature);
-        m_signatureTokens = (char *) &(*tokens)[0];
+        std::vector<mdSignature> tokens;
+        initTokens(metadataEmit, tokens);
+        m_signatureTokensLength = tokens.size() * sizeof(mdSignature);
+        m_signatureTokens = new char[m_signatureTokensLength];
+        memcpy(m_signatureTokens, (char *)&tokens[0], m_signatureTokensLength);
     }
 
     LOG(tout << "Instrumenting token " << HEX(m_jittedToken) << "..." << std::endl);
@@ -416,61 +458,78 @@ HRESULT Instrumenter::doInstrumentation(ModuleID oldModuleId, const WCHAR *assem
     MethodInfo mi = MethodInfo{m_jittedToken, bytes, codeLength, maxStackSize(), ehcs, ehCount()};
     instrumentedFunctions[{m_moduleId, m_jittedToken}] = mi;
 
-    MethodBodyInfo info{
-        (unsigned)m_jittedToken,
-        (unsigned)codeSize(),
-        (unsigned)(assemblyNameLength - 1) * sizeof(WCHAR),
-        (unsigned)(moduleNameLength - 1) * sizeof(WCHAR),
-        (unsigned)maxStackSize(),
-        (unsigned)ehCount(),
-        m_signatureTokensLength,
-        m_signatureTokens,
-        assemblyName,
-        moduleName,
-        code(),
-        (char*)ehs()
-    };
-    if (!m_protocol.sendSerializable(InstrumentCommand, info)) return false;
+    getLock();
+
+//    MethodBodyInfo info{
+//        (unsigned)m_jittedToken,
+//        (unsigned)codeSize(),
+//        (unsigned)(assemblyNameLength - 1) * sizeof(WCHAR),
+//        (unsigned)(moduleNameLength - 1) * sizeof(WCHAR),
+//        (unsigned)maxStackSize(),
+//        (unsigned)ehCount(),
+//        m_signatureTokensLength,
+//        m_signatureTokens,
+//        assemblyName,
+//        moduleName,
+//        code(),
+//        (char*)ehs()
+//    };
+//    if (!m_protocol.sendSerializable(InstrumentCommand, info)) FAIL_LOUD("Instrumenting: serialization of method failed!");
+
+    char *bytecodeR; int lengthR; int maxStackSizeR; char *ehsR; int ehsLengthR;
+
+    ModuleID moduleId = m_moduleId;
+    mdMethodDef jittedToken = m_jittedToken;
+    disableInstrumentation();
+    m_protocol.instrumentR((unsigned)m_jittedToken, (unsigned)codeSize(), (unsigned)(assemblyNameLength - 1) * sizeof(WCHAR),
+                          (unsigned)(moduleNameLength - 1) * sizeof(WCHAR),(unsigned)maxStackSize(),(unsigned)ehCount(),
+                          m_signatureTokensLength,m_signatureTokens,assemblyName,moduleName,code(),(char*)ehs(),
+                          // result
+                          &bytecodeR, &lengthR, &maxStackSizeR, &ehsR, &ehsLengthR);
+    enableInstrumentation();
+    m_moduleId = moduleId;
+    m_jittedToken = jittedToken;
+
     LOG(tout << "Successfully sent method body!");
-    char *bytecode; int length; unsigned maxStackSize; char *ehs; unsigned ehsLength;
-#ifdef _DEBUG
-    CommandType command;
-    do {
-        if (!m_protocol.acceptCommand(command)) return false;
-        switch (command) {
-            case ReadString: {
-                char *string;
-                if (!m_protocol.acceptString(string)) return false;
-                unsigned index = allocateString(string);
-                if (!m_protocol.sendStringsPoolIndex(index)) return false;
-                break;
-            }
-            default:
-                break;
-        }
-    } while (command != ReadMethodBody);
-#endif
-    LOG(tout << "Reading method body back...");
-    if (!m_protocol.acceptMethodBody(bytecode, length, maxStackSize, ehs, ehsLength)) return false;
-    LOG(tout << "Exporting " << length << " IL bytes!");
-    IfFailRet(exportIL(bytecode, length, maxStackSize, ehs, ehsLength));
+
+//    CommandType command;
+//    do {
+//        command = getAndHandleCommand();
+//    } while (command != ReadMethodBody);
+//    LOG(tout << "Reading method body back...");
+//    if (!m_protocol.acceptMethodBody(bytecodeR, lengthR, maxStackSizeR, ehsR, ehsLengthR))
+//        FAIL_LOUD("Instrumenting: accepting method body failed!");
+
+    LOG(tout << "Exporting " << lengthR << " IL bytes!");
+    IfFailRet(exportIL(bytecodeR, lengthR, maxStackSizeR, ehsR, ehsLengthR));
+    freeLock();
 
     return S_OK;
 }
 
-HRESULT Instrumenter::instrument(FunctionID functionId) {
-    HRESULT hr;
-    ModuleID oldModuleId = m_moduleId;
+HRESULT Instrumenter::instrument(FunctionID functionId, bool reJIT) {
+    HRESULT hr = S_OK;
+    ModuleID newModuleId;
     ClassID classId;
-    IfFailRet(m_profilerInfo.GetFunctionInfo(functionId, &classId, &m_moduleId, &m_jittedToken));
+    IfFailRet(m_profilerInfo.GetFunctionInfo(functionId, &classId, &newModuleId, &m_jittedToken));
     assert((m_jittedToken & 0xFF000000L) == mdtMethodDef);
+
+    if (!instrumentingEnabled() && !reJIT) {
+        // TODO: unify mainReached and instrumentingEnabled #do
+//        skippedBeforeMain.insert({m_moduleId, m_jittedToken});
+        LOG(tout << "Instrumentation of token " << HEX(m_jittedToken) << " is skipped" << std::endl);
+        return S_OK;
+    } else {
+        // TODO: move this to probes #do
+//        if (!skippedBeforeMain.empty()) IfFailRet(startReJitSkipped());
+    }
 
     LPCBYTE baseLoadAddress;
     ULONG moduleNameLength;
     AssemblyID assembly;
-    IfFailRet(m_profilerInfo.GetModuleInfo(m_moduleId, &baseLoadAddress, 0, &moduleNameLength, nullptr, &assembly));
+    IfFailRet(m_profilerInfo.GetModuleInfo(newModuleId, &baseLoadAddress, 0, &moduleNameLength, nullptr, &assembly));
     WCHAR *moduleName = new WCHAR[moduleNameLength];
-    IfFailRet(m_profilerInfo.GetModuleInfo(m_moduleId, &baseLoadAddress, moduleNameLength, &moduleNameLength, moduleName, &assembly));
+    IfFailRet(m_profilerInfo.GetModuleInfo(newModuleId, &baseLoadAddress, moduleNameLength, &moduleNameLength, moduleName, &assembly));
     ULONG assemblyNameLength;
     AppDomainID appDomainId;
     ModuleID startModuleId;
@@ -478,25 +537,45 @@ HRESULT Instrumenter::instrument(FunctionID functionId) {
     WCHAR *assemblyName = new WCHAR[assemblyNameLength];
     IfFailRet(m_profilerInfo.GetAssemblyInfo(assembly, assemblyNameLength, &assemblyNameLength, assemblyName, &appDomainId, &startModuleId));
 
+    bool shouldInstrument = isMainEntered();
     if (!m_mainReached) {
         if (currentMethodIsMain(moduleName, (int) moduleNameLength, m_jittedToken)) {
+            LOG(tout << "Main function reached!" << std::endl);
             m_mainReached = true;
+            shouldInstrument = true;
             IfFailRet(startReJitSkipped());
         }
     }
 
-    if (m_mainReached) {
-        LOG(tout << "Main function reached!" << std::endl);
-        doInstrumentation(oldModuleId, assemblyName, assemblyNameLength, moduleName, moduleNameLength);
+    if (m_mainReached && shouldInstrument) {
+        // TODO: analyze the IL code instead to understand that we've injected functions?
+        if (instrumentedFunctions.find({newModuleId, m_jittedToken}) != instrumentedFunctions.end()) {
+            LOG(tout << "Duplicate jitting of " << HEX(m_jittedToken) << std::endl);
+            return S_OK;
+        }
+        if (!skippedBeforeMain.empty())
+            IfFailRet(startReJitSkipped());
+        if (isMainLeft()) {
+            freeLock();
+            // NOTE: main left, further instrumentation is not needed, so doing nothing
+            while (true) { }
+//            if (!m_reJitInstrumentedStarted)
+//                IfFailRet(startReJitInstrumented());
+//            LOG(tout << "Main left! Skipping instrumentation of " << HEX(m_jittedToken) << std::endl);
+            return S_OK;
+        }
+        ModuleID oldModuleId = m_moduleId;
+        m_moduleId = newModuleId;
+        hr = doInstrumentation(oldModuleId, assemblyName, assemblyNameLength, moduleName, moduleNameLength);
     } else {
         LOG(tout << "Instrumentation of token " << HEX(m_jittedToken) << " is skipped" << std::endl);
-        skippedBeforeMain.insert({m_moduleId, m_jittedToken});
+        skippedBeforeMain.insert({newModuleId, m_jittedToken});
     }
 
     delete[] moduleName;
     delete[] assemblyName;
 
-    return S_OK;
+    return hr;
 }
 
 HRESULT Instrumenter::undoInstrumentation(FunctionID functionId) {
@@ -517,8 +596,8 @@ HRESULT Instrumenter::undoInstrumentation(FunctionID functionId) {
 HRESULT Instrumenter::reInstrument(FunctionID functionId) {
     // NOTE: if main is left, rejit needs to delete probes
     // NOTE: otherwise, rejit needs to place probes
-    if (mainLeft())
+    if (isMainLeft())
         return undoInstrumentation(functionId);
-    else
-        return instrument(functionId);
+
+    return instrument(functionId, true);
 }

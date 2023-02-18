@@ -1,168 +1,60 @@
 #include "stack.h"
-#include "../logging.h"
 #include <cstring>
 #include <cassert>
+#include <algorithm>
 
 using namespace vsharp;
 
 #define CONCRETE UINT32_MAX
 
-StackFrame::StackFrame(unsigned resolvedToken, unsigned unresolvedToken, const bool *args, unsigned argsCount)
+StackFrame::StackFrame(unsigned resolvedToken, unsigned unresolvedToken, const bool *args, unsigned argsCount, bool isNewObj, Storage &heap)
     : m_concreteness(nullptr)
     , m_capacity(0)
     , m_concretenessTop(0)
     , m_symbolsCount(0)
-    , m_args(new bool[argsCount])
+    , m_args(new LocalObject[argsCount])
+    , m_argsCount(argsCount)
     , m_locals(nullptr)
+    , m_localsCount(0)
     , m_resolvedToken(resolvedToken)
     , m_unresolvedToken(unresolvedToken)
     , m_enteredMarker(false)
     , m_spontaneous(false)
+    , m_heap(heap)
+    , m_ip(0)
 {
-    memcpy(m_args, args, argsCount);
-    resetPopsTracking();
+    for (int i = 0; i < argsCount; i++)
+        m_args[i].writeConcretenessWholeObject(args[i]);
+
+    // NOTE: setting default 'this' address to 'null'
+    ObjectKey key{};
+    key.none = nullptr;
+    m_thisAddress = {0, 0, ReferenceType, key};
 }
 
 StackFrame::~StackFrame()
 {
+    m_heap.deleteObjects(allocatedLocals);
     delete [] m_concreteness;
+    if (m_localsCount > 0)
+        delete [] m_locals;
+    if (m_argsCount > 0)
+        delete [] m_args;
 }
 
 void StackFrame::configure(unsigned maxStackSize, unsigned localsCount)
 {
     m_capacity = maxStackSize;
-    m_concreteness = new unsigned[maxStackSize];
-    m_locals = new bool[localsCount];
-    memset(m_locals, true, localsCount);
+    m_concreteness = new StackCell[maxStackSize];
+    m_locals = new LocalObject[localsCount];
+    m_localsCount = localsCount;
+    for (int i = 0; i < localsCount; i++)
+        m_locals[i].writeConcretenessWholeObject(true);
 }
 
 bool StackFrame::isEmpty() const
 {
     return m_concretenessTop == 0;
-}
-
-bool StackFrame::isFull() const
-{
-    return m_concretenessTop == m_capacity;
-}
-
-bool StackFrame::peek0() const
-{
-    return m_concreteness[m_concretenessTop - 1] == CONCRETE;
-}
-
-bool StackFrame::peek1() const
-{
-    return m_concreteness[m_concretenessTop - 2] == CONCRETE;
-}
-
-bool StackFrame::peek2() const
-{
-    return m_concreteness[m_concretenessTop - 3] == CONCRETE;
-}
-
-bool StackFrame::peek(unsigned idx) const
-{
-    return m_concreteness[m_concretenessTop - idx - 1] == CONCRETE;
-}
-
-void StackFrame::pop0()
-{
-    m_lastPoppedSymbolics.clear();
-}
-
-void StackFrame::push1(bool isConcrete)
-{
-#ifdef _DEBUG
-    if (isFull()) {
-        LOG(tout << "Frame info before stack overflow: balance = " << m_concretenessTop << ", capacity = " << m_capacity
-                 << ", token = " << HEX(m_resolvedToken));
-        FAIL_LOUD("Stack overflow!");
-    }
-#endif
-    m_concreteness[m_concretenessTop++] = isConcrete ? CONCRETE : ++m_symbolsCount;
-}
-
-void StackFrame::push1Concrete()
-{
-    push1(true);
-}
-
-bool StackFrame::pop1()
-{
-#ifdef _DEBUG
-    if (isEmpty()) {
-        LOG(tout << "Corrupted frame info: token = " << HEX(m_resolvedToken) << ", stackSize = " << m_capacity);
-        FAIL_LOUD("Corrupted stack!");
-    }
-#endif
-    m_lastPoppedSymbolics.clear();
-    --m_concretenessTop;
-    unsigned cell = m_concreteness[m_concretenessTop];
-    if (cell != CONCRETE) {
-        --m_symbolsCount;
-        m_lastPoppedSymbolics.emplace_back(cell, 0u);
-        return false;
-    }
-    return true;
-}
-
-
-bool StackFrame::pop(unsigned count)
-{
-#ifdef _DEBUG
-    if (m_concretenessTop < count) {
-        LOG(tout << "Corrupted frame info: token = " << HEX(m_resolvedToken) << ", stackSize = " << m_capacity);
-        FAIL_LOUD("Corrupted stack!");
-    }
-#endif
-    m_lastPoppedSymbolics.clear();
-    m_concretenessTop -= count;
-    for (unsigned i = m_concretenessTop + count; i > m_concretenessTop; --i) {
-        unsigned cell = m_concreteness[i - 1];
-        if (cell != CONCRETE) {
-            --m_symbolsCount;
-            m_lastPoppedSymbolics.emplace_back(cell, m_concretenessTop + count - i);
-        }
-    }
-    return m_lastPoppedSymbolics.empty();
-}
-
-void StackFrame::pop1Async()
-{
-    pop1();
-    if (m_minSymbsCountSinceLastSent > m_symbolsCount)
-        m_minSymbsCountSinceLastSent = m_symbolsCount;
-}
-
-bool StackFrame::arg(unsigned index) const
-{
-    return m_args[index];
-}
-
-void StackFrame::setArg(unsigned index, bool value)
-{
-    m_args[index] = value;
-}
-
-bool StackFrame::loc(unsigned index) const
-{
-    return m_locals[index];
-}
-
-void StackFrame::setLoc(unsigned index, bool value)
-{
-    m_locals[index] = value;
-}
-
-bool StackFrame::dup()
-{
-    bool concreteness = pop1();
-    if (concreteness) {
-        push1(concreteness);
-        push1(concreteness);
-    }
-    return concreteness;
 }
 
 unsigned StackFrame::count() const
@@ -178,6 +70,20 @@ unsigned StackFrame::resolvedToken() const
 unsigned StackFrame::unresolvedToken() const
 {
     return m_unresolvedToken;
+}
+
+void StackFrame::setResolvedToken(unsigned resolved)
+{
+    this->m_resolvedToken = resolved;
+}
+
+void StackFrame::thisAddress(VirtualAddress &virtAddress) const
+{
+    virtAddress = this->m_thisAddress;
+}
+
+unsigned StackFrame::ip() const {
+    return m_ip;
 }
 
 bool StackFrame::hasEntered() const
@@ -200,31 +106,24 @@ void StackFrame::setSpontaneous(bool isUnmanaged)
     this->m_spontaneous = isUnmanaged;
 }
 
-unsigned StackFrame::evaluationStackPops() const
+unsigned StackFrame::moduleToken() const
 {
-    assert(m_minSymbsCountSinceLastSent <= m_lastSentSymbolsCount);
-    return m_lastSentSymbolsCount - m_minSymbsCountSinceLastSent;
+    return m_moduleToken;
 }
 
-unsigned StackFrame::symbolicsCount() const
+void StackFrame::setModuleToken(unsigned token)
 {
-    return m_symbolsCount;
+    m_moduleToken = token;
 }
 
-void StackFrame::resetPopsTracking()
+Stack::Stack(Storage &heap)
+    : m_heap(heap)
 {
-    m_lastSentSymbolsCount = m_symbolsCount;
-    m_minSymbsCountSinceLastSent = m_symbolsCount;
 }
 
-const std::vector<std::pair<unsigned, unsigned>> &StackFrame::poppedSymbolics() const
+void Stack::pushFrame(unsigned resolvedToken, unsigned unresolvedToken, const bool *args, unsigned argsCount, bool isNewObj)
 {
-    return m_lastPoppedSymbolics;
-}
-
-void Stack::pushFrame(unsigned resolvedToken, unsigned unresolvedToken, const bool *args, unsigned argsCount)
-{
-    m_frames.push_back(StackFrame(resolvedToken, unresolvedToken, args, argsCount));
+    m_frames.emplace_back(resolvedToken, unresolvedToken, args, argsCount, isNewObj, m_heap);
 }
 
 
@@ -268,6 +167,24 @@ const StackFrame &Stack::topFrame() const
     return m_frames.back();
 }
 
+StackFrame &Stack::frameAt(unsigned index) {
+#ifdef _DEBUG
+    if (index >= m_frames.size()) {
+        FAIL_LOUD("Requesting too large frame number!");
+    }
+#endif
+    return m_frames[index];
+}
+
+const StackFrame &Stack::frameAt(unsigned index) const {
+#ifdef _DEBUG
+    if (index >= m_frames.size()) {
+        FAIL_LOUD("Requesting too large frame number!");
+    }
+#endif
+    return m_frames[index];
+}
+
 bool Stack::isEmpty() const
 {
     return m_frames.empty();
@@ -278,26 +195,53 @@ unsigned Stack::framesCount() const
     return m_frames.size();
 }
 
-unsigned Stack::tokenAt(unsigned index) const
+void Stack::resetLastSentTop()
 {
-    return m_frames[index].unresolvedToken();
+    unsigned size = m_frames.size();
+    m_minTopSinceLastSent = size;
+    m_lastSentTop = size;
 }
 
-unsigned Stack::unsentPops() const
+void Stack::resetPopsTracking()
 {
-    return m_lastSentTop - m_minTopSinceLastSent;
+    resetLastSentTop();
 }
 
-unsigned Stack::minTopSinceLastSent() const
+bool Stack::opmemIsEmpty() const
 {
-    return m_minTopSinceLastSent;
+    return m_opmem.empty();
 }
 
-void Stack::resetPopsTracking(int framesCount)
+Stack::OperandMem &Stack::opmem(UINT32 offset)
 {
-    m_lastSentTop = framesCount;
-    m_minTopSinceLastSent = m_frames.size();
-    if (!m_frames.empty()) {
-        m_frames.back().resetPopsTracking();
+    if (m_opmem.empty()) {
+        m_opmem.emplace_back(m_frames.back(), offset);
+    } else {
+        const Stack::OperandMem &top = m_opmem.back();
+        if (top.offset() != offset || &top.stackFrame() != &m_frames.back()) {
+            m_opmem.emplace_back(m_frames.back(), offset);
+        }
     }
+    return m_opmem.back();
+}
+
+const Stack::OperandMem &Stack::lastOpmem() const
+{
+    return m_opmem.back();
+}
+
+void Stack::popOpmem()
+{
+    m_opmem.pop_back();
+}
+
+Stack::OperandMem::OperandMem(const StackFrame &frame, UINT32 offset)
+    : m_frame(frame)
+    , m_offset(offset)
+    , m_entries_count(0)
+    , m_data_ptr(0)
+    , m_memSize(3)
+{
+    m_dataPtrs.resize(m_memSize);
+    m_data.resize(m_memSize * (sizeof(DOUBLE) + sizeof(CorElementType)));
 }

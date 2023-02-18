@@ -3,6 +3,7 @@
 
 #include <set>
 #include "corProfiler.h"
+#include "communication/protocol.h"
 #include "cComPtr.h"
 
 struct COR_ILMETHOD_SECT_EH;
@@ -47,7 +48,7 @@ private:
     unsigned    m_nEH;
     IMAGE_COR_ILMETHOD_SECT_EH_CLAUSE_FAT *m_pEH;
 
-    char *m_code;
+    char        *m_code;
     unsigned    m_codeSize;
 
     std::map<std::pair<ModuleID, mdMethodDef>, MethodInfo> instrumentedFunctions;
@@ -68,7 +69,6 @@ private:
     HRESULT importEH(const COR_ILMETHOD_SECT_EH* pILEH, unsigned nEH);
     HRESULT exportIL(char *bytecode, unsigned codeLength, unsigned maxStackSize, char *ehs, unsigned ehsLength);
 
-    HRESULT startReJitInstrumented();
     HRESULT startReJitSkipped();
     HRESULT undoInstrumentation(FunctionID functionId);
     HRESULT doInstrumentation(ModuleID oldModuleId, const WCHAR *assemblyName, ULONG assemblyNameLength, const WCHAR *moduleName, ULONG moduleNameLength);
@@ -83,8 +83,14 @@ public:
     unsigned signatureTokensLength() const { return m_signatureTokensLength; }
 
     void configureEntryPoint();
+    mdToken FieldRefTypeToken(mdToken fieldRef);
+    mdToken FieldDefTypeToken(mdToken fieldDef);
+    mdToken ArgTypeToken(mdToken method, INT32 argIndex);
+    mdToken LocalTypeToken(INT32 localIndex);
+    mdToken ReturnTypeToken();
+    mdToken DeclaringTypeToken(mdToken method);
 
-    HRESULT instrument(FunctionID functionId);
+    HRESULT instrument(FunctionID functionId, bool reJIT);
     HRESULT reInstrument(FunctionID functionId);
 };
 
