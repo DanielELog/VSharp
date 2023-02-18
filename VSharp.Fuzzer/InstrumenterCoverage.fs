@@ -8,6 +8,22 @@ open System.Collections.Generic
 open VSharp.Concolic
 open VSharp.Interpreter.IL
 
+module InteropCalls =
+        [<DllImport("libvsharpConcolic", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)>]
+        extern uint AddString(byte *str);
+        [<DllImport("libvsharpConcolic", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)>]
+        extern uint FieldRefTypeToken(uint fieldRef);
+        [<DllImport("libvsharpConcolic", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)>]
+        extern uint FieldDefTypeToken(uint fieldDef);
+        [<DllImport("libvsharpConcolic", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)>]
+        extern uint ArgTypeToken(uint method, uint argIndex);
+        [<DllImport("libvsharpConcolic", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)>]
+        extern uint LocalTypeToken(int localIndex);
+        [<DllImport("libvsharpConcolic", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)>]
+        extern uint ReturnTypeToken();
+        [<DllImport("libvsharpConcolic", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)>]
+        extern uint DeclaringTypeToken(uint method);
+
 [<type: StructLayout(LayoutKind.Sequential, Pack=1, CharSet=CharSet.Ansi)>]
 type probesCov = {
     mutable trackCoverage : uint64
