@@ -290,7 +290,11 @@ type InstrumenterCoverage(communicator : ICommunicator, entryPoint : MethodBase,
     member x.PlaceProbes() =
         let instructions = x.rewriter.CopyInstructions()
         let method = Application.getMethod x.m
-        let basicBlocks = method.CFG.SortedOffsets
+        let cfg =
+            match method.CFG with
+            | Some cfg -> cfg
+            | None -> internalfailf $"Getting CFG of method {x} without body (extern or abstract)"
+        let basicBlocks = cfg.SortedOffsets
         let mutable currentBasicBlockIndex = 0
         assert(not <| Array.isEmpty instructions)
         let mutable atLeastOneReturnFound = false
