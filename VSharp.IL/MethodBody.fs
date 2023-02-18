@@ -65,14 +65,14 @@ type MethodWithBody internal (m : MethodBase) =
             let ehcs = System.Collections.Generic.Dictionary<int, System.Reflection.ExceptionHandlingClause>()
             let props : rawMethodProperties =
                 {token = uint actualMethod.MetadataToken; ilCodeSize = uint ilBytes.Length; assemblyNameLength = 0u; moduleNameLength = 0u; maxStackSize = uint methodBodyBytes.MaxStackSize; signatureTokensLength = 0u}
-
+            let tokens = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof<signatureTokens>) :?> signatureTokens
             let createEH (eh : System.Reflection.ExceptionHandlingClause) : rawExceptionHandler =
                 let matcher = if eh.Flags = ExceptionHandlingClauseOptions.Filter then eh.FilterOffset else eh.HandlerOffset // TODO: need catch type token?
                 ehcs.Add(matcher, eh)
                 {flags = int eh.Flags; tryOffset = uint eh.TryOffset; tryLength = uint eh.TryLength; handlerOffset = uint eh.HandlerOffset; handlerLength = uint eh.HandlerLength; matcher = uint matcher}
             let ehs = methodBodyBytes.ExceptionHandlingClauses |> Seq.map createEH |> Array.ofSeq
             let body : rawMethodBody =
-                {properties = props; assembly = assemblyName; moduleName = moduleName; il = ilBytes; ehs = ehs}
+                {properties = props; assembly = assemblyName; tokens = tokens; moduleName = moduleName; il = ilBytes; ehs = ehs}
             let rewriter = ILRewriter(body)
             rewriter.Import()
             let result = rewriter.Export()

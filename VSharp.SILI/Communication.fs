@@ -267,6 +267,7 @@ type Communicator(pipeFile) =
             let propertiesBytes, rest = Array.splitAt (Marshal.SizeOf typeof<rawMethodProperties>) bytes
             let properties = x.Deserialize<rawMethodProperties> propertiesBytes
             let sizeOfSignatureTokens = __notImplemented__()
+            let tokens = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof<signatureTokens>) :?> signatureTokens
             if int properties.signatureTokensLength <> sizeOfSignatureTokens then
                 fail "Size of received signature tokens buffer mismatch the expected! Probably you've altered the client-side signatures, but forgot to alter the server-side structure (or vice-versa)"
             let assemblyNameBytes, rest = Array.splitAt (int properties.assemblyNameLength) rest
@@ -277,7 +278,7 @@ type Communicator(pipeFile) =
             let ehSize = Marshal.SizeOf typeof<rawExceptionHandler>
             let ehCount = Array.length ehBytes / ehSize
             let ehs = Array.init ehCount (fun i -> x.Deserialize<rawExceptionHandler>(ehBytes, i * ehSize))
-            {properties = properties; assembly = assemblyName; moduleName = moduleName; il = ilBytes; ehs = ehs}
+            {properties = properties; assembly = assemblyName; tokens = tokens; moduleName = moduleName; il = ilBytes; ehs = ehs}
         | None -> unexpectedlyTerminated()
 
     member private x.ToUIntPtr =

@@ -25,7 +25,9 @@ typedef void (*InstrumentType)(unsigned, unsigned, unsigned, unsigned, unsigned,
         // result
         char**, int*, int*, char**, int*);
 
-extern "C" IMAGEHANDLER_API void SyncInfoGettersPointers(long arrayInfoPtr, long objectInfoPtr, long instrumentPtr);
+typedef int (*abcd)(int);
+
+extern "C" IMAGEHANDLER_API void SyncInfoGettersPointers(long instrumentPtr);
 extern "C" IMAGEHANDLER_API char *GetProbes(unsigned *bytesCount);
 
 namespace vsharp {

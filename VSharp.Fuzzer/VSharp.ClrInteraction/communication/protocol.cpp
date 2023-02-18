@@ -6,9 +6,12 @@
 #include <iostream>
 
 InstrumentType instrument = nullptr;
+abcd a = nullptr;
 
 void SyncInfoGettersPointers(long instrumentPtr) {
-    instrument = (InstrumentType) instrumentPtr;
+    //instrument = (InstrumentType) instrumentPtr;
+    a = (abcd) instrumentPtr;
+    a(0);
 }
 
 using namespace vsharp;
