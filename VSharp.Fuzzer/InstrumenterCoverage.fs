@@ -10,19 +10,19 @@ open VSharp.Interpreter.IL
 
 module InteropCalls =
         [<DllImport("libvsharpConcolic", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)>]
-        extern uint AddString(byte *str);
+        extern uint AddString(byte *str)
         [<DllImport("libvsharpConcolic", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)>]
-        extern uint FieldRefTypeToken(uint fieldRef);
+        extern uint FieldRefTypeToken(uint fieldRef)
         [<DllImport("libvsharpConcolic", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)>]
-        extern uint FieldDefTypeToken(uint fieldDef);
+        extern uint FieldDefTypeToken(uint fieldDef)
         [<DllImport("libvsharpConcolic", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)>]
-        extern uint ArgTypeToken(uint method, uint argIndex);
+        extern uint ArgTypeToken(uint method, uint argIndex)
         [<DllImport("libvsharpConcolic", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)>]
-        extern uint LocalTypeToken(int localIndex);
+        extern uint LocalTypeToken(int localIndex)
         [<DllImport("libvsharpConcolic", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)>]
-        extern uint ReturnTypeToken();
+        extern uint ReturnTypeToken()
         [<DllImport("libvsharpConcolic", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)>]
-        extern uint DeclaringTypeToken(uint method);
+        extern uint DeclaringTypeToken(uint method)
 
 [<type: StructLayout(LayoutKind.Sequential, Pack=1, CharSet=CharSet.Ansi)>]
 type probesCov = {
@@ -51,7 +51,7 @@ with
         if x.Probe2str.TryGetValue(uint64 address, result) then "probe_" + result.Value
         else toString address
 
-type InstrumenterCoverage(communicator : ICommunicator, entryPoint : MethodBase, probes : probesCov) =
+type InstrumenterCoverage(entryPoint : MethodBase, probes : probesCov) =
     // TODO: should we consider executed assembly build options here?
     let ldc_i : opcode = (if System.Environment.Is64BitOperatingSystem then OpCodes.Ldc_I8 else OpCodes.Ldc_I4) |> VSharp.OpCode
     let mutable currentStaticFieldID = 0
@@ -274,24 +274,24 @@ type InstrumenterCoverage(communicator : ICommunicator, entryPoint : MethodBase,
             x.AcceptFieldRefTypeToken f.MetadataToken
 
     member private x.AcceptFieldRefTypeToken (memberRef : int) =
-        communicator.ParseFieldRefTypeToken memberRef |> int
+        InteropCalls.FieldRefTypeToken (memberRef |> uint) |> int
 
     member private x.AcceptFieldDefTypeToken (fieldDef : int) =
-        communicator.ParseFieldDefTypeToken fieldDef |> int
+        InteropCalls.FieldDefTypeToken (fieldDef |> uint) |> int
 
     member private x.AcceptArgTypeToken (t : System.Type) idx =
         x.AcceptTypeToken t (fun () ->
             let methodDef = x.m.MetadataToken
-            communicator.ParseArgTypeToken methodDef idx |> int)
+            InteropCalls.ArgTypeToken (methodDef |> uint, idx |> uint) |> int)
 
     member private x.AcceptLocVarTypeToken (t : System.Type) idx =
-        x.AcceptTypeToken t (fun () -> communicator.ParseLocalTypeToken idx |> int)
+        x.AcceptTypeToken t (fun () -> InteropCalls.LocalTypeToken idx |> int)
 
     member private x.AcceptReturnTypeToken (t : System.Type) =
-        x.AcceptTypeToken t (communicator.ParseReturnTypeToken >> int)
+        x.AcceptTypeToken t (InteropCalls.ReturnTypeToken >> int)
 
     member private x.AcceptDeclaringTypeToken (m : MethodBase) (methodToken : int) =
-        x.AcceptTypeToken m.DeclaringType (fun () -> communicator.ParseDeclaringTypeToken methodToken |> int)
+        x.AcceptTypeToken m.DeclaringType (fun () -> InteropCalls.DeclaringTypeToken (methodToken |> uint) |> int)
 
     member private x.TypeSizeInstr (t : System.Type) getToken =
         if t.IsByRef || t.IsArray || (t.IsConstructedGenericType && t.GetGenericTypeDefinition().FullName = "System.ByReference`1") then
