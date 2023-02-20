@@ -4,6 +4,7 @@ open System
 open System.Diagnostics
 open System.IO
 open System.IO.Pipes
+open System.Text
 open VSharp.Concolic
 open VSharp.Fuzzer
 open VSharp
@@ -70,29 +71,7 @@ type CallInstrumenterType =
         resultEhs : nativeptr<nativeptr<byte>> *
         ehsLength : nativeptr<int> -> unit
 
-let CallInstrumenter (token : uint)
-        (codeSize : uint)
-        (assemblyNameLength : uint)
-        (moduleNameLength : uint)
-        (maxStackSize : uint)
-        (ehsSize : uint)
-        (signatureTokensLength : uint)
-        (signatureTokensPtr : nativeptr<byte>)
-        (assemblyNamePtr : nativeptr<char>)
-        (moduleNamePtr : nativeptr<char>)
-        (byteCodePtr : nativeptr<byte>)
-        (ehsPtr : nativeptr<byte>)
-        // result
-        (instrumentedBody : nativeptr<nativeptr<byte>>)
-        (length : nativeptr<int>)
-        (resultMaxStackSize : nativeptr<int>)
-        (resultEhs : nativeptr<nativeptr<byte>>)
-        (ehsLength : nativeptr<int>) =
-    let tokensLength = Marshal.SizeOf typeof<signatureTokens>
-    let signatureTokensBytes : byte array = Array.zeroCreate tokensLength
-    Marshal.Copy(NativePtr.toNativeInt signatureTokensPtr, signatureTokensBytes, 0, tokensLength)
-    let tokens = Communicator.Deserialize<signatureTokens>(signatureTokensBytes)
-    ()
+let instrumenter = InstrumenterCoverage
 
 type FuzzerPipeServer () =
     let io = new NamedPipeServerStream("FuzzerPipe", PipeDirection.In)
@@ -111,6 +90,82 @@ type FuzzerPipeServer () =
 type FuzzerApplication (assembly, outputDir) =
     let fuzzer = Fuzzer ()
     let server = FuzzerPipeServer ()
+
+    static let mutable instrumenterCoverage : Option<InstrumenterCoverage> = None
+
+    static member public CallInstrumenter (token : uint)
+            (codeSize : uint)
+            (assemblyNameLength : uint)
+            (moduleNameLength : uint)
+            (maxStackSize : uint)
+            (ehsSize : uint)
+            (signatureTokensLength : uint)
+            (signatureTokensPtr : nativeptr<byte>)
+            (assemblyNamePtr : nativeptr<char>)
+            (moduleNamePtr : nativeptr<char>)
+            (byteCodePtr : nativeptr<byte>)
+            (ehsPtr : nativeptr<byte>)
+            // result
+            (instrumentedBody : nativeptr<nativeptr<byte>>)
+            (length : nativeptr<int>)
+            (resultMaxStackSize : nativeptr<int>)
+            (resultEhs : nativeptr<nativeptr<byte>>)
+            (ehsLength : nativeptr<int>) =
+        // serialization
+        let tokensLength = Marshal.SizeOf typeof<signatureTokens>
+        let signatureTokensBytes : byte array = Array.zeroCreate tokensLength
+        Marshal.Copy(NativePtr.toNativeInt signatureTokensPtr, signatureTokensBytes, 0, tokensLength)
+
+        let tokens = Communicator.Deserialize<signatureTokens>(signatureTokensBytes)
+        let assemblyNameLengthInt = assemblyNameLength |> int
+        let assemblyNameBytes : byte array = Array.zeroCreate assemblyNameLengthInt
+        Marshal.Copy(NativePtr.toNativeInt assemblyNamePtr, assemblyNameBytes, 0, assemblyNameLengthInt)
+
+        let assembly = Encoding.Unicode.GetString(assemblyNameBytes)
+        let moduleNameLengthInt = moduleNameLength |> int
+        let moduleNameBytes : byte array = Array.zeroCreate moduleNameLengthInt
+        Marshal.Copy(NativePtr.toNativeInt moduleNamePtr, moduleNameBytes, 0, moduleNameLengthInt)
+
+        let methodModule = Encoding.Unicode.GetString(moduleNameBytes)
+        let codeSizeInt = codeSize |> int
+        let codeBytes : byte array = Array.zeroCreate codeSizeInt
+        Marshal.Copy(NativePtr.toNativeInt byteCodePtr, codeBytes, 0, codeSizeInt)
+
+        let ehSize = Marshal.SizeOf typeof<rawExceptionHandler>
+        let count = (ehsSize |> int) / ehSize
+        let ehsSizeInt = ehsSize |> int
+        let ehsBytes : byte array = Array.zeroCreate ehsSizeInt
+        let ehs : rawExceptionHandler array =
+            if count > 0 then
+                assert(NativePtr.isNullPtr ehsPtr |> not)
+                Marshal.Copy(NativePtr.toNativeInt ehsPtr, ehsBytes, 0, ehsSizeInt)
+                [| for i in 0 .. count - 1 -> Communicator.Deserialize<rawExceptionHandler>(ehsBytes, i * ehSize) |]
+            else
+                Array.zeroCreate 0
+
+        // instrumentation
+        let properties : rawMethodProperties =
+            { token = token; ilCodeSize = codeSize; assemblyNameLength = assemblyNameLength; moduleNameLength = moduleNameLength; maxStackSize = maxStackSize; signatureTokensLength = signatureTokensLength }
+        let methodBody : rawMethodBody =
+            {properties = properties; assembly = assembly; tokens = tokens; moduleName = methodModule; il = codeBytes; ehs = ehs}
+
+        let instrumented =
+            match instrumenterCoverage with
+            | Some instr -> instr.Instrument(methodBody)
+            | None -> internalfailf "requesting intstrumenter before instantiation!"
+
+        // result deserialization
+        NativePtr.write instrumentedBody (Marshal.UnsafeAddrOfPinnedArrayElement(instrumented.il, 0) |> NativePtr.ofNativeInt)
+        NativePtr.write length (instrumented.properties.ilCodeSize |> int)
+        NativePtr.write resultMaxStackSize (instrumented.properties.maxStackSize |> int)
+        let instrumentedEhsLength = instrumented.ehs.Length
+        let ehBytes : byte array = Array.zeroCreate (ehSize * instrumentedEhsLength)
+        for i in 0 .. instrumentedEhsLength - 1 do
+            Communicator.Serialize(instrumented.ehs[i], ehBytes, i * ehSize)
+        NativePtr.write resultEhs (Marshal.UnsafeAddrOfPinnedArrayElement(ehBytes, 0) |> NativePtr.ofNativeInt)
+        NativePtr.write ehsLength ehBytes.Length
+        ()
+
     member this.Start () =
         let rec loop () =
             async {
@@ -121,6 +176,15 @@ type FuzzerApplication (assembly, outputDir) =
                 | Fuzz (moduleName, methodToken) ->
                     let methodBase = resolveMethodBaseFromAssembly assembly moduleName methodToken
                     let method = Application.getMethod methodBase
+
+                    // setting up instrumenter for coverage profiler
+                    let mutable bytesCount : uint = 0u
+                    let probesPtr = InteropSyncCalls.GetProbes(&&bytesCount)
+                    let probesBytes : byte array = Array.zeroCreate (bytesCount |> int)
+                    Marshal.Copy(NativePtr.toNativeInt probesPtr, probesBytes, 0, bytesCount |> int)
+                    let probes = Communicator.Deserialize<probesCov>(probesBytes)
+                    instrumenterCoverage <- InstrumenterCoverage(methodBase, probes) |> Some
+
                     Logger.error "Try to fuzz"
                     let result = fuzzer.Fuzz method
                     Logger.error "Fuzzed"
@@ -142,7 +206,7 @@ let main argv =
     Console.SetOut out
     Console.SetError out
     Logger.error "started"
-    let Invoker = CallInstrumenterType(CallInstrumenter)
+    let Invoker = CallInstrumenterType(FuzzerApplication.CallInstrumenter)
     let fptr = Marshal.GetFunctionPointerForDelegate Invoker
     InteropSyncCalls.SyncInfoGettersPointers(fptr.ToInt64())
     Logger.error "sent pointers"

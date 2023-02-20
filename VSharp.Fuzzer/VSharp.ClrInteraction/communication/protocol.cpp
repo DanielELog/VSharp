@@ -6,14 +6,10 @@
 #include <iostream>
 
 InstrumentType instrument = nullptr;
-abcd a = nullptr;
 
 void SyncInfoGettersPointers(long instrumentPtr) {
-    //instrument = (InstrumentType) instrumentPtr;
+    instrument = (InstrumentType) instrumentPtr;
     tout << "got pointer from f#: " << instrumentPtr << std::endl;
-    a = (abcd) instrumentPtr;
-    int res = a(0);
-    tout << "got result from pointer: " << res << std::endl;
 }
 
 using namespace vsharp;
