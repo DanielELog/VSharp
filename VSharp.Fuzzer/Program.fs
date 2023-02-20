@@ -4,6 +4,7 @@ open System
 open System.Diagnostics
 open System.IO
 open System.IO.Pipes
+open VSharp.Concolic
 open VSharp.Fuzzer
 open VSharp
 open VSharp.Interpreter.IL
@@ -12,11 +13,11 @@ open System.Runtime.InteropServices
 open FSharp.NativeInterop
 
 module InteropSyncCalls =
-        [<DllImport("libvsharpConcolic", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)>]
-        extern void SyncInfoGettersPointers(Int64 instrumentPtr)
+    [<DllImport(baka.pathToConcolic, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)>]
+    extern void SyncInfoGettersPointers(Int64 instrumentPtr)
 
-        [<DllImport("libvsharpConcolic", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)>]
-        extern byte* GetProbes(uint* byteCount)
+    [<DllImport(baka.pathToConcolic, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)>]
+    extern byte* GetProbes(uint* byteCount)
 
 let getAssembly argv =
     if Array.length argv < 1 then failwith "Unspecified path to assembly"
@@ -48,20 +49,50 @@ let makeCilState entryMethod state =
 
 [<UnmanagedFunctionPointer(CallingConvention.StdCall)>]
 type CallInstrumenterType =
-    delegate of int -> int
-        // token : uint *
-        // codeSize : uint (assemblyNameLength : uint) (moduleNameLength : uint)
-        //     (maxStackSize : uint) (ehsSize : uint) (signatureTokensLength : uint) (signatureTokensPtr : nativeptr<byte>) (assemblyNamePtr : nativeptr<char>)
-        //     (moduleNamePtr : nativeptr<char>) (byteCodePtr : nativeptr<byte>) (ehsPtr : nativeptr<byte>)
-        //     // result
-        //     (instrumentedBody : nativeptr<nativeptr<byte>>) (length : nativeptr<int>) (resultMaxStackSize : nativeptr<int>)
-        //     (resultEhs : nativeptr<nativeptr<byte>>) (ehsLength : nativeptr<int>)
+    // delegate of int -> int
+    delegate of
+        token : uint *
+        codeSize : uint *
+        assemblyNameLength : uint *
+        moduleNameLength : uint *
+        maxStackSize : uint *
+        ehsSize : uint *
+        signatureTokensLength : uint *
+        signatureTokensPtr : nativeptr<byte> *
+        assemblyNamePtr : nativeptr<char> *
+        moduleNamePtr : nativeptr<char> *
+        byteCodePtr : nativeptr<byte> *
+        ehsPtr : nativeptr<byte> *
+        // result
+        instrumentedBody : nativeptr<nativeptr<byte>> *
+        length : nativeptr<int> *
+        resultMaxStackSize : nativeptr<int> *
+        resultEhs : nativeptr<nativeptr<byte>> *
+        ehsLength : nativeptr<int> -> unit
 
-let CallInstrumenter (a : int) =
-    Logger.trace "hello from c++! %O" a
-    1
-
-let Invoker = CallInstrumenterType(CallInstrumenter)
+let CallInstrumenter (token : uint)
+        (codeSize : uint)
+        (assemblyNameLength : uint)
+        (moduleNameLength : uint)
+        (maxStackSize : uint)
+        (ehsSize : uint)
+        (signatureTokensLength : uint)
+        (signatureTokensPtr : nativeptr<byte>)
+        (assemblyNamePtr : nativeptr<char>)
+        (moduleNamePtr : nativeptr<char>)
+        (byteCodePtr : nativeptr<byte>)
+        (ehsPtr : nativeptr<byte>)
+        // result
+        (instrumentedBody : nativeptr<nativeptr<byte>>)
+        (length : nativeptr<int>)
+        (resultMaxStackSize : nativeptr<int>)
+        (resultEhs : nativeptr<nativeptr<byte>>)
+        (ehsLength : nativeptr<int>) =
+    let tokensLength = Marshal.SizeOf typeof<signatureTokens>
+    let signatureTokensBytes : byte array = Array.zeroCreate tokensLength
+    Marshal.Copy(NativePtr.toNativeInt signatureTokensPtr, signatureTokensBytes, 0, tokensLength)
+    let tokens = Communicator.Deserialize<signatureTokens>(signatureTokensBytes)
+    ()
 
 type FuzzerPipeServer () =
     let io = new NamedPipeServerStream("FuzzerPipe", PipeDirection.In)
@@ -81,8 +112,6 @@ type FuzzerApplication (assembly, outputDir) =
     let fuzzer = Fuzzer ()
     let server = FuzzerPipeServer ()
     member this.Start () =
-        let fptr = Marshal.GetFunctionPointerForDelegate Invoker
-        InteropSyncCalls.SyncInfoGettersPointers(fptr.ToInt64())
         let rec loop () =
             async {
                 Logger.error $"Try to read message"
@@ -109,12 +138,18 @@ type FuzzerApplication (assembly, outputDir) =
 
 [<EntryPoint>]
 let main argv =
+    let out = new StreamWriter (File.OpenWrite ($"/home/daniel/work/FuzzerLogs/kek.log"))
+    Console.SetOut out
+    Console.SetError out
+    Logger.error "started"
+    let Invoker = CallInstrumenterType(CallInstrumenter)
+    let fptr = Marshal.GetFunctionPointerForDelegate Invoker
+    InteropSyncCalls.SyncInfoGettersPointers(fptr.ToInt64())
+    Logger.error "sent pointers"
     let assembly = getAssembly argv
     let outputDir = getOutputDir argv
     let logName = outputDir.Split Path.DirectorySeparatorChar |> Seq.last
-    let out = new StreamWriter (File.OpenWrite ($"/home/daniel/work/FuzzerLogs/{logName}.log"))
-    Console.SetOut out
-    Console.SetError out
+
     Logger.error $"PID: {Process.GetCurrentProcess().Id}"
     Logger.error "Fuzzer started!"
 

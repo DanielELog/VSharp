@@ -54,7 +54,7 @@ type FuzzerInteractor (pathToAssembly, outputDir) =
             info.EnvironmentVariables.["CORECLR_PROFILER_PATH"] <- pathToClient
             info.WorkingDirectory <- Directory.GetCurrentDirectory()
             info.FileName <- "dotnet"
-            info.Arguments <- $"\"/home/daniel/work/VSharp/VSharp.Fuzzer/bin/Debug/net6.0/VSharp.Fuzzer.dll %s{pathToAssembly} %s{outputDir}\""
+            info.Arguments <- $"/home/daniel/work/VSharp/VSharp.Fuzzer/bin/Debug/net6.0/VSharp.Fuzzer.dll %s{pathToAssembly} %s{outputDir}"
             info.UseShellExecute <- false
             info.RedirectStandardInput <- false
             info.RedirectStandardOutput <- false

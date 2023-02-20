@@ -206,7 +206,7 @@ type Communicator(pipeFile) =
         Marshal.FreeHGlobal(unmanagedPtr)
         result
 
-    member private x.Deserialize<'a> (bytes : byte array) = x.Deserialize<'a>(bytes, 0)
+    member x.Deserialize<'a> (bytes : byte array) = x.Deserialize<'a>(bytes, 0)
 
     member private x.Serialize<'a> (structure : 'a, bytes : byte array, startIndex : int) =
         let size = Marshal.SizeOf(typeof<'a>)
