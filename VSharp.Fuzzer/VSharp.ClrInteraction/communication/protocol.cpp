@@ -39,3 +39,7 @@ void Protocol::sendTerminateByExceptionCommand() {
     terminateByException();
     LOG(tout << "Sending terminate by exception command" << std::endl);
 }
+
+bool Protocol::isInstrumenterAvailable() {
+    return instrument != nullptr;
+}

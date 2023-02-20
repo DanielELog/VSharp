@@ -37,6 +37,7 @@ public:
                     const WCHAR *assemblyNamePtr, const WCHAR *moduleNamePtr, char *byteCodePtr, char *ehsPtr,
                     // result
                     char **instrumentedBody, int *length, int *resultMaxStackSize, char **resultEhs, int *ehsLength);
+    bool isInstrumenterAvailable();
 
     static void sendTerminateByExceptionCommand();
 };

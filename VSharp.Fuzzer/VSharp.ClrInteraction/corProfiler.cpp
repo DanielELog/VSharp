@@ -50,6 +50,7 @@ CorProfiler::~CorProfiler()
     {
         this->corProfilerInfo->Release();
         this->corProfilerInfo = nullptr;
+        delete instrumenter;
     }
 }
 
@@ -114,7 +115,7 @@ HRESULT STDMETHODCALLTYPE CorProfiler::Shutdown()
     {
         this->corProfilerInfo->Release();
         this->corProfilerInfo = nullptr;
-        delete instrumenter;
+        //delete instrumenter;
     }
 
     return S_OK;
@@ -244,12 +245,15 @@ bool jitInProcess = false;
 
 HRESULT STDMETHODCALLTYPE CorProfiler::JITCompilationStarted(FunctionID functionId, BOOL fIsSafeToBlock)
 {
+    LOG(tout << "JITCompilationStarted, threadID = " << currentThread() << " funcId = " << functionId << std::endl);
+//    if (!instrumentingEnabled()) return S_OK;
     UNUSED(fIsSafeToBlock);
 //    LOG(tout << "JITCompilationStarted, threadID = " << currentThread() << std::endl);
 
 //    if (jitInProcess) FAIL_LOUD("Handling JIT event, when previous was not finished!");
 //    jitInProcess = true;
-    HRESULT hr = instrumenter->instrument(functionId, false);
+    auto instrument = new Instrumenter(*corProfilerInfo, *protocol);
+    HRESULT hr = instrument->instrument(functionId, false);
 //    jitInProcess = false;
     return hr;
 //    return S_OK;

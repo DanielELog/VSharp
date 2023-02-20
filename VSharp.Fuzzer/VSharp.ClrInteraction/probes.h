@@ -25,6 +25,16 @@ void setProtocol(Protocol *p) {
     protocol = p;
 }
 
+bool areProbesEnabled = false;
+
+void enableProbes() {
+    areProbesEnabled = true;
+}
+
+void disableProbes() {
+    areProbesEnabled = false;
+}
+
 void trackCoverage(OFFSET offset, bool &stillExpectsCoverage) {
     if (!addCoverageStep(offset, stillExpectsCoverage)) {
         freeLock();
@@ -47,11 +57,13 @@ int registerProbe(unsigned long long probe) {
     RETTYPE STDMETHODCALLTYPE NAME ARGS
 
 PROBE(void, Track_Coverage, (OFFSET offset)) {
+    if (!areProbesEnabled) return;
     bool commandsDisabled;
     trackCoverage(offset, commandsDisabled);
 }
 
 inline void branch(OFFSET offset) {
+    if (!areProbesEnabled) return;
     bool commandsDisabled;
     trackCoverage(offset, commandsDisabled);
 }
@@ -62,6 +74,10 @@ PROBE(void, Switch, (OFFSET offset)) { branch(offset); }
 
 PROBE(void, Track_Enter, (mdMethodDef token, unsigned moduleToken, unsigned maxStackSize, unsigned argsCount, unsigned localsCount, INT8 isSpontaneous)) {
     LOG(tout << "Track_Enter, token = " << HEX(token) << std::endl);
+    if (!areProbesEnabled) {
+        LOG(tout << "probes are disalbed; skipped");
+        return;
+    }
     Stack &stack = vsharp::stack();
     StackFrame *top = stack.isEmpty() ? nullptr : &stack.topFrame();
     unsigned expected = stack.isEmpty() ? 0xFFFFFFFFu : top->resolvedToken();
@@ -87,6 +103,8 @@ PROBE(void, Track_Enter, (mdMethodDef token, unsigned moduleToken, unsigned maxS
 }
 
 PROBE(void, Track_EnterMain, (mdMethodDef token, unsigned moduleToken, UINT16 argsCount, bool argsConcreteness, unsigned maxStackSize, unsigned localsCount)) {
+    enableProbes();
+    tout << "entered main" << std::endl;
     Stack &stack = vsharp::stack();
     assert(stack.isEmpty());
     auto args = new bool[argsCount];
@@ -98,6 +116,7 @@ PROBE(void, Track_EnterMain, (mdMethodDef token, unsigned moduleToken, UINT16 ar
 }
 
 PROBE(void, Track_Leave, (UINT8 returnValues, OFFSET offset)) {
+    if (!areProbesEnabled) return;
     Stack &stack = vsharp::stack();
     StackFrame &top = stack.topFrame();
     stack.popFrame();
@@ -105,6 +124,7 @@ PROBE(void, Track_Leave, (UINT8 returnValues, OFFSET offset)) {
 }
 
 void leaveMain(OFFSET offset, UINT8 opsCount, INT_PTR ptr=UNKNOWN_ADDRESS) {
+    disableProbes();
     Stack &stack = vsharp::stack();
     StackFrame &top = stack.topFrame();
     stack.popFrame();
@@ -120,6 +140,7 @@ PROBE(void, Track_LeaveMain_f8, (DOUBLE returnValue, OFFSET offset)) { leaveMain
 PROBE(void, Track_LeaveMain_p, (INT_PTR returnValue, OFFSET offset)) { leaveMain(offset, 1); }
 
 PROBE(void, Finalize_Call, (UINT8 returnValues)) {
+    if (!areProbesEnabled) return;
     Stack &stack = vsharp::stack();
     if (!stack.topFrame().hasEntered()) {
         // Extern has been called, should pop its frame and push return result onto stack

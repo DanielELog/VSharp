@@ -54,7 +54,7 @@ with
         if x.Probe2str.TryGetValue(uint64 address, result) then "probe_" + result.Value
         else toString address
 
-type InstrumenterCoverage(entryPoint : MethodBase, probes : probesCov) =
+type InstrumenterCoverage(probes : probesCov) =
     // TODO: should we consider executed assembly build options here?
     let ldc_i : opcode = (if System.Environment.Is64BitOperatingSystem then OpCodes.Ldc_I8 else OpCodes.Ldc_I4) |> VSharp.OpCode
     let mutable currentStaticFieldID = 0
@@ -62,6 +62,10 @@ type InstrumenterCoverage(entryPoint : MethodBase, probes : probesCov) =
 
     let mutable currentFunctionID = 0
     let functionsIDs = Dictionary<int, MethodInfo>()
+
+    let mutable entryPoint : Option<MethodBase> = None
+
+    member public x.setEntryPoint entryMethod = entryPoint <- Some entryMethod
 
     static member private instrumentedFunctions = HashSet<MethodBase>()
     [<DefaultValue>] val mutable tokens : signatureTokens
@@ -163,7 +167,10 @@ type InstrumenterCoverage(entryPoint : MethodBase, probes : probesCov) =
         let argsCount = parameters.Length
         let totalArgsCount = if hasThis then argsCount + 1 else argsCount
         // TODO: MethodHandles are not equal, fix it
-        if x.m.Name = entryPoint.Name then
+        let isMain = match entryPoint with
+                        | None -> false
+                        | Some e -> x.m.Name = e.Name
+        if isMain then
             let args = [(OpCodes.Ldc_I4, Arg32 x.m.MetadataToken)
                         (OpCodes.Ldc_I4, Arg32 (Coverage.moduleToken x.m.Module))
                         (OpCodes.Ldc_I4, Arg32 totalArgsCount)
@@ -218,7 +225,10 @@ type InstrumenterCoverage(entryPoint : MethodBase, probes : probesCov) =
         | _ -> internalfailf "PrependValidLeaveMain: unexpected stack state! %O" instr.stackState
 
     member private x.PlaceLeaveProbe(instr : ilInstr byref) =
-        if x.m.MethodHandle = entryPoint.MethodHandle then
+        let isMain = match entryPoint with
+                        | None -> false
+                        | Some e -> x.m.MethodHandle = e.MethodHandle
+        if isMain then
             x.PrependValidLeaveMain(&instr)
         else
             let returnsSomething = Reflection.hasNonVoidResult x.m
@@ -308,6 +318,7 @@ type InstrumenterCoverage(entryPoint : MethodBase, probes : probesCov) =
 
     member x.PlaceProbes() =
         let instructions = x.rewriter.CopyInstructions()
+        Logger.error "PlaceProbes : 1"
         let method = Application.getMethod x.m
         let cfg =
             match method.CFG with
@@ -551,7 +562,7 @@ type InstrumenterCoverage(entryPoint : MethodBase, probes : probesCov) =
                 | OpCodeValues.Leave
                 | OpCodeValues.Leave_S
                 | OpCodeValues.Endfilter -> ()
-                | _ -> __unreachable__()
+                | opcode -> internalfail $"opcode = {opcode}"
 
                 if hasPrefix && op.OpCodeType <> OpCodeType.Prefix then
                     hasPrefix <- false
@@ -567,19 +578,25 @@ type InstrumenterCoverage(entryPoint : MethodBase, probes : probesCov) =
     member x.Instrument(body : rawMethodBody) =
         assert(x.rewriter = null)
         x.tokens <- body.tokens
+        Logger.error "Instrument : start"
         // TODO: call Application.getMethod and take ILRewriter there!
         x.rewriter <- ILRewriter(body)
+        Logger.error "Instrument : rewriter"
         x.m <- x.rewriter.Method
         let t = x.m.DeclaringType
         if t = typeof<System.InvalidProgramException> || t = typeof<System.TypeLoadException> || t = typeof<System.BadImageFormatException> then
             internalfailf "Incorrect instrumentation: exception %O is thrown!" t
         let result =
-            if x.ShouldInstrument && InstrumenterCoverage.instrumentedFunctions.Add x.m then
+            Logger.error "Instrument : 1"
+            if InstrumenterCoverage.instrumentedFunctions.Add x.m then
                 Logger.trace "Instrumenting %s (token = %u)" (Reflection.methodToString x.m) body.properties.token
                 try
+                    Logger.error "Instrument : 2"
                     x.rewriter.Import()
                     // x.rewriter.PrintInstructions "before instrumentation" probes
+                    Logger.error "Instrument : 3"
                     x.PlaceProbes()
+                    Logger.error "Instrument : 4"
                     // x.rewriter.PrintInstructions "after instrumentation" probes
                     x.rewriter.Export()
                 with e ->

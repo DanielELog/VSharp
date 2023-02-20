@@ -458,7 +458,7 @@ HRESULT Instrumenter::doInstrumentation(ModuleID oldModuleId, const WCHAR *assem
     MethodInfo mi = MethodInfo{m_jittedToken, bytes, codeLength, maxStackSize(), ehcs, ehCount()};
     instrumentedFunctions[{m_moduleId, m_jittedToken}] = mi;
 
-    getLock();
+    //getLock();
 
 //    MethodBodyInfo info{
 //        (unsigned)m_jittedToken,
@@ -480,12 +480,18 @@ HRESULT Instrumenter::doInstrumentation(ModuleID oldModuleId, const WCHAR *assem
 
     ModuleID moduleId = m_moduleId;
     mdMethodDef jittedToken = m_jittedToken;
+    if (!instrumentingEnabled() || !m_protocol.isInstrumenterAvailable()) {
+        tout << "skipping jitted method: " << moduleName << " : " << m_jittedToken << std::endl;
+        return S_OK;
+    }
     disableInstrumentation();
+    tout << "calling instrumenter" << std::endl;
     m_protocol.instrumentR((unsigned)m_jittedToken, (unsigned)codeSize(), (unsigned)(assemblyNameLength - 1) * sizeof(WCHAR),
                           (unsigned)(moduleNameLength - 1) * sizeof(WCHAR),(unsigned)maxStackSize(),(unsigned)ehCount(),
                           m_signatureTokensLength,m_signatureTokens,assemblyName,moduleName,code(),(char*)ehs(),
                           // result
                           &bytecodeR, &lengthR, &maxStackSizeR, &ehsR, &ehsLengthR);
+    tout << "call finished" << std::endl;
     enableInstrumentation();
     m_moduleId = moduleId;
     m_jittedToken = jittedToken;
@@ -502,27 +508,32 @@ HRESULT Instrumenter::doInstrumentation(ModuleID oldModuleId, const WCHAR *assem
 
     LOG(tout << "Exporting " << lengthR << " IL bytes!");
     IfFailRet(exportIL(bytecodeR, lengthR, maxStackSizeR, ehsR, ehsLengthR));
-    freeLock();
+    //freeLock();
 
     return S_OK;
 }
 
 HRESULT Instrumenter::instrument(FunctionID functionId, bool reJIT) {
+    if (!m_protocol.isInstrumenterAvailable()) {
+        LOG(tout << "Instrumentation of token " << HEX(m_jittedToken) << " is skipped, no instrumenter added"
+                 << std::endl);
+        return S_OK;
+    }
     HRESULT hr = S_OK;
     ModuleID newModuleId;
     ClassID classId;
     IfFailRet(m_profilerInfo.GetFunctionInfo(functionId, &classId, &newModuleId, &m_jittedToken));
     assert((m_jittedToken & 0xFF000000L) == mdtMethodDef);
 
-    if (!instrumentingEnabled() && !reJIT) {
-        // TODO: unify mainReached and instrumentingEnabled #do
-//        skippedBeforeMain.insert({m_moduleId, m_jittedToken});
-        LOG(tout << "Instrumentation of token " << HEX(m_jittedToken) << " is skipped" << std::endl);
-        return S_OK;
-    } else {
-        // TODO: move this to probes #do
-//        if (!skippedBeforeMain.empty()) IfFailRet(startReJitSkipped());
-    }
+//    if (!instrumentingEnabled() && !reJIT) {
+//        // TODO: unify mainReached and instrumentingEnabled #do
+////        skippedBeforeMain.insert({m_moduleId, m_jittedToken});
+//        LOG(tout << "Instrumentation of token " << HEX(m_jittedToken) << " is skipped" << std::endl);
+//        return S_OK;
+//    } else {
+//        // TODO: move this to probes #do
+////        if (!skippedBeforeMain.empty()) IfFailRet(startReJitSkipped());
+//    }
 
     LPCBYTE baseLoadAddress;
     ULONG moduleNameLength;
@@ -547,16 +558,17 @@ HRESULT Instrumenter::instrument(FunctionID functionId, bool reJIT) {
         }
     }
 
-    if (m_mainReached && shouldInstrument) {
+    if (true) {
         // TODO: analyze the IL code instead to understand that we've injected functions?
-        if (instrumentedFunctions.find({newModuleId, m_jittedToken}) != instrumentedFunctions.end()) {
-            LOG(tout << "Duplicate jitting of " << HEX(m_jittedToken) << std::endl);
-            return S_OK;
-        }
-        if (!skippedBeforeMain.empty())
-            IfFailRet(startReJitSkipped());
+//        if (instrumentedFunctions.find({newModuleId, m_jittedToken}) != instrumentedFunctions.end()) {
+//            LOG(tout << "Duplicate jitting of " << HEX(m_jittedToken) << std::endl);
+//            return S_OK;
+//        }
+//        if (!skippedBeforeMain.empty())
+//            IfFailRet(startReJitSkipped());
         if (isMainLeft()) {
-            freeLock();
+            tout << "keeeeek!!!!!!" << std::endl;
+            //freeLock();
             // NOTE: main left, further instrumentation is not needed, so doing nothing
             while (true) { }
 //            if (!m_reJitInstrumentedStarted)
@@ -569,7 +581,8 @@ HRESULT Instrumenter::instrument(FunctionID functionId, bool reJIT) {
         hr = doInstrumentation(oldModuleId, assemblyName, assemblyNameLength, moduleName, moduleNameLength);
     } else {
         LOG(tout << "Instrumentation of token " << HEX(m_jittedToken) << " is skipped" << std::endl);
-        skippedBeforeMain.insert({newModuleId, m_jittedToken});
+        tout << "instrumenting disabled; no rejit" << std::endl;
+        // skippedBeforeMain.insert({newModuleId, m_jittedToken});
     }
 
     delete[] moduleName;
