@@ -81,7 +81,7 @@ void trackCoverage(OFFSET offset, bool &stillExpectsCoverage);
 
 void Track_Coverage();
 
-void Branch(OFFSET offset);
+void Branch(OFFSET offset, int methodId);
 
 void Track_Call(OFFSET offset);
 
