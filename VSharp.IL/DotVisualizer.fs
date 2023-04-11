@@ -19,7 +19,7 @@ type DotVisualizer(outputDirectory : DirectoryInfo) =
     let visitedEdges = HashSet<codeLocation * codeLocation>()
     let states = ResizeArray<IGraphTrackableState>()
 
-    let loc2BB loc = {method = loc.method; offset = loc.method.ForceCFG.ResolveBasicBlock loc.offset}
+    let loc2BB loc = {method = loc.method; offset = loc.method.ForceCFG.ResolveBasicBlockOffset loc.offset}
 
     let leave loc =
         stateMarkers.[loc] <- stateMarkers.[loc] - 1

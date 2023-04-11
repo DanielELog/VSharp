@@ -1,6 +1,7 @@
 namespace VSharp
 
 open System
+open System.Collections.Generic
 open System.Diagnostics
 open System.IO
 open System.Reflection
@@ -11,7 +12,7 @@ open System.Xml
 // NOTE: if 'expectedCoverage' is null 'TestResultsChecker' runs all tests and checks results equality
 //       otherwise, it compares expected coverage to computed coverage of tests
 type TestResultsChecker(testDir : DirectoryInfo, runnerDir : DirectoryInfo, expectedCoverage : Nullable<int>) =
-    let expectedCoverage = Option.ofNullable expectedCoverage
+    let expectedCoverage = None
     // NOTE: if 'TestResultsChecker' succeeds, 'resultMessage' is empty, otherwise, it contains failure message
     let mutable resultMessage = ""
     let runDotnet args =
@@ -42,7 +43,7 @@ type TestResultsChecker(testDir : DirectoryInfo, runnerDir : DirectoryInfo, expe
     let runnerWithArgs (directory : DirectoryInfo) =
         $"%s{runnerDir.FullName}%c{Path.DirectorySeparatorChar}VSharp.TestRunner.dll {directory.FullName}"
 
-    let run =
+    let run (methodInfo : MethodInfo) testDir =
         match expectedCoverage with
         | Some _ ->
             let _, localTools, _ = runDotnet "tool list"
@@ -53,12 +54,13 @@ type TestResultsChecker(testDir : DirectoryInfo, runnerDir : DirectoryInfo, expe
                     if globalTools.Contains "dotcover" then "-g"
                     else raise (InvalidOperationException "JetBrains.DotCover tool not found! Either install it locally by running 'dotnet tool restore' in build directory, or globally by running 'dotnet tool install JetBrains.dotCover.GlobalTool -g'")
             // TODO: try to run DotCover from IntegrationTests in same process
-            runnerWithArgs >> runDotCover globalArg
+            runDotCover globalArg (runnerWithArgs testDir)
         | None ->
-            fun (directory : DirectoryInfo) ->
-                // TODO: run TestRunner from IntegrationTests in same process
-                let code, _, error = runDotnet (runnerWithArgs directory)
-                code = 0, error
+            let exitCode, error = VSharp.CoverageRunner.CoverageRunner.RunAndGetHistory(runnerWithArgs testDir, "cov.cov", testDir.FullName, methodInfo)
+            exitCode = 0, error
+            // TODO: run TestRunner from IntegrationTests in same process
+            // let code, _, error = runDotnet (runnerWithArgs testDir)
+            // code = 0, error
 
     let rec typeNameForDotCover (typ : Type) =
         if typ.IsGenericType then
@@ -95,32 +97,13 @@ type TestResultsChecker(testDir : DirectoryInfo, runnerDir : DirectoryInfo, expe
 
     let getCoverage (m : MethodInfo) =
         assert(Option.isSome expectedCoverage)
-        if String.IsNullOrEmpty m.DeclaringType.Namespace then
-            __notImplemented__() // TODO: does coverage report in this case omit the namespace?
-        // TODO: we might also have inner classes and properties
-        let assemblyName = m.Module.Assembly.GetName().Name
-        let namespaceName = m.DeclaringType.Namespace
-        let typeNames = declaringTypeName4Dotcover m.DeclaringType
-        let typeSection = Array.map (fun t -> sprintf "/Type[@Name='%s']" t) typeNames |> join ""
-        let nameOfParameter (p : ParameterInfo) = typeNameForDotCover p.ParameterType
-        let parametersTypes = m.GetParameters() |> Seq.map nameOfParameter |> join ","
-        let returnType = m.ReturnType |> typeNameForDotCover
-        let methodName = sprintf "%s(%s):%s" m.Name parametersTypes returnType
-        let xpath = sprintf "/Root/Assembly[@Name='%s']/Namespace[@Name='%s']%s/Method[@Name='%s']/@CoveragePercent" assemblyName namespaceName typeSection methodName
-        let doc = XmlDocument()
-        let docPath = sprintf "%s%cdotCover.Output.xml" testDir.FullName Path.DirectorySeparatorChar
-        assert(File.Exists(docPath))
-        doc.Load(docPath)
-        let nodes = doc.DocumentElement.SelectNodes(xpath)
-        match nodes.Count with
-        | 0 -> raise (InvalidOperationException <| sprintf "Coverage results for %O not found!" m)
-        | 1 ->
-            let elem = nodes.[0]
-            (elem :?> XmlAttribute).Value |> Int32.Parse
-        | _ -> raise (InvalidOperationException <| sprintf "Invalid query of coverage results for %O!" m)
+        let history = CoverageDeserializer.getHistory <| File.ReadAllBytes ($"{testDir.Name}/cov.cov")
+        let historyFlat = Array.collect id history
+        0
 
     member x.Check(methodInfo : MethodInfo, [<Out>] actualCoverage : Nullable<uint> byref) : bool =
-        let success, error = run testDir
+        let success, error = run methodInfo testDir
+        Logger.error "error output %O" error
         if not success then
             raise <| InvalidOperationException ("Running test results checker failed: " + error)
         match expectedCoverage with

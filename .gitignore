@@ -229,3 +229,5 @@ VSharp.ClrInteraction/host/*
 
 # Rendered tests
 VSharp.Test/GeneratedTests/**
+runtime/
+VSharp.Fuzzer/VSharp.ClrInteraction/.vscode/settings.json

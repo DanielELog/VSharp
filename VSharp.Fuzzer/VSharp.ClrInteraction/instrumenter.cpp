@@ -60,14 +60,13 @@ static std::set<std::pair<FunctionID, ModuleID>> vsharp::instrumentedMethods;
 HRESULT initTokens(const CComPtr<IMetaDataEmit> &metadataEmit, std::vector<mdSignature> &tokens) {
     auto covProb = getProbes();
     mdSignature signatureToken;
-    SIG_DEF(0x00, ELEMENT_TYPE_VOID)
-    covProb->Track_Coverage_Sig.setSig(signatureToken);
     SIG_DEF(0x01, ELEMENT_TYPE_VOID, ELEMENT_TYPE_OFFSET)
     covProb->Finalize_Call_Sig.setSig(signatureToken);
     covProb->Track_Call_Sig.setSig(signatureToken);
     SIG_DEF(0x02, ELEMENT_TYPE_VOID, ELEMENT_TYPE_OFFSET, ELEMENT_TYPE_I4)
     covProb->Branch_Sig.setSig(signatureToken);
     covProb->Track_Leave_Sig.setSig(signatureToken);
+    covProb->Track_Coverage_Sig.setSig(signatureToken);
     covProb->Track_Tailcall_Sig.setSig(signatureToken);
     covProb->Track_LeaveMain_Sig.setSig(signatureToken);
     SIG_DEF(0x03, ELEMENT_TYPE_VOID, ELEMENT_TYPE_OFFSET, ELEMENT_TYPE_I4, ELEMENT_TYPE_I4)
@@ -97,6 +96,10 @@ Instrumenter::~Instrumenter()
 
 bool Instrumenter::currentMethodIsMain(const WCHAR *moduleName, int moduleSize, mdMethodDef method) const {
     // NOTE: decrementing 'moduleSize', because of null terminator
+    // tout << "checking main: ";
+    // for (int i = 0; i < moduleSize - 2; i++)
+    //     tout << (char)moduleName[i];
+    // tout << std::endl;
     if (mainModuleName == nullptr)
         return false;
     if (mainModuleNameLength != moduleSize - 1 || mainToken != method)

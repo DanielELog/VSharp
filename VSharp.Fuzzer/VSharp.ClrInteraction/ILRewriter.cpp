@@ -1166,10 +1166,10 @@ void countOffsets(ILRewriter *pilr) {
     }
 }
 
-void AddOffsetInstrBefore(ILRewriter *pilr, ILInstr *pInstr) {
+void AddLDCInstrBefore(ILRewriter *pilr, ILInstr *pInstr, INT32 arg) {
     auto pNewInstr = pilr->NewILInstr();
     pNewInstr->m_opcode = CEE_LDC_I4;
-    pNewInstr->m_Arg32 = (INT32)pInstr->m_offset;
+    pNewInstr->m_Arg32 = arg;
     pilr->InsertBefore(pInstr, pNewInstr);
 }
 
@@ -1210,21 +1210,29 @@ HRESULT RewriteIL(
 
     BOOL isTailCall = FALSE;
 
+    std::set<INT32> branchTargets;
+
     // adding probes for coverage tracking
     for (ILInstr * pInstr = pilr->GetILList()->m_pNext; pInstr != pilr->GetILList(); pInstr = pInstr->m_pNext)
     {
         // branch coverage
         if (CEE_BR_S <= pInstr->m_opcode && pInstr->m_opcode <= CEE_SWITCH) {
-//            AddOffsetInstrBefore(pilr, pInstr);
-            auto pNewInstr = pilr->NewILInstr();
-            pNewInstr->m_opcode = CEE_LDC_I4;
-            pNewInstr->m_Arg32 = (INT32)pInstr->m_offset;
-            pilr->InsertBefore(pInstr, pNewInstr);
-            pNewInstr = pilr->NewILInstr();
-            pNewInstr->m_opcode = CEE_LDC_I4;
-            pNewInstr->m_Arg32 = methodId;
-            pilr->InsertBefore(pInstr, pNewInstr);
+            AddLDCInstrBefore(pilr, pInstr, (INT32)pInstr->m_offset);
+            // auto pNewInstr = pilr->NewILInstr();
+            // pNewInstr->m_opcode = CEE_LDC_I4;
+            // pNewInstr->m_Arg32 = (INT32)pInstr->m_offset;
+            // pilr->InsertBefore(pInstr, pNewInstr);
+
+            AddLDCInstrBefore(pilr, pInstr, methodId);
+            // pNewInstr = pilr->NewILInstr();
+            // pNewInstr->m_opcode = CEE_LDC_I4;
+            // pNewInstr->m_Arg32 = methodId;
+            // pilr->InsertBefore(pInstr, pNewInstr);
+
             IfFailRet(AddProbe(pilr, covProb->Branch_Addr, covProb->Branch_Sig.getSig(), pInstr));
+
+            branchTargets.insert(pInstr->m_Arg32);
+
             continue;
         }
 
@@ -1263,14 +1271,18 @@ HRESULT RewriteIL(
                     trackCallAddr = covProb->Track_Call_Addr;
                     trackCallSig = covProb->Track_Call_Sig.getSig();
                 }
-                auto pNewInstr = pilr->NewILInstr();
-                pNewInstr->m_opcode = CEE_LDC_I4;
-                pNewInstr->m_Arg32 = (INT32)pInstr->m_offset;
-                pilr->InsertBefore(instr, pNewInstr);
-                pNewInstr = pilr->NewILInstr();
-                pNewInstr->m_opcode = CEE_LDC_I4;
-                pNewInstr->m_Arg32 = methodId;
-                pilr->InsertBefore(instr, pNewInstr);
+                AddLDCInstrBefore(pilr, instr, (INT32)pInstr->m_offset);
+                // auto pNewInstr = pilr->NewILInstr();
+                // pNewInstr->m_opcode = CEE_LDC_I4;
+                // pNewInstr->m_Arg32 = (INT32)pInstr->m_offset;
+                // pilr->InsertBefore(instr, pNewInstr);
+
+                AddLDCInstrBefore(pilr, instr, methodId);
+                // pNewInstr = pilr->NewILInstr();
+                // pNewInstr->m_opcode = CEE_LDC_I4;
+                // pNewInstr->m_Arg32 = methodId;
+                // pilr->InsertBefore(instr, pNewInstr);
+
                 IfFailRet(AddProbe(pilr, trackCallAddr, trackCallSig, instr));
                 break;
             }
@@ -1300,16 +1312,17 @@ HRESULT RewriteIL(
                 pilr->InsertAfter(pInstr, pNewRet);
 
                 //AddOffsetInstrBefore(pilr, pInstr);
-                auto pNewInstr = pilr->NewILInstr();
-                pNewInstr->m_opcode = CEE_LDC_I4;
-                pNewInstr->m_Arg32 = (INT32)pInstr->m_offset;
-                pilr->InsertBefore(pNewRet, pNewInstr);
+                AddLDCInstrBefore(pilr, pNewRet, (INT32)pInstr->m_offset);
+                // auto pNewInstr = pilr->NewILInstr();
+                // pNewInstr->m_opcode = CEE_LDC_I4;
+                // pNewInstr->m_Arg32 = (INT32)pInstr->m_offset;
+                // pilr->InsertBefore(pNewRet, pNewInstr);
 
-                ILInstr * offsetInstr;
-                offsetInstr = pilr->NewILInstr();
-                offsetInstr->m_opcode = CEE_LDC_I4;
-                offsetInstr->m_Arg32 = (INT32)methodId;
-                pilr->InsertBefore(pNewRet, offsetInstr);
+                AddLDCInstrBefore(pilr, pNewRet, methodId);
+                // offsetInstr = pilr->NewILInstr();
+                // offsetInstr->m_opcode = CEE_LDC_I4;
+                // offsetInstr->m_Arg32 = (INT32)methodId;
+                // pilr->InsertBefore(pNewRet, offsetInstr);
 
                 // Add now insert the epilog before the new RET
                 IfFailRet(AddProbe(pilr, leaveMethodAddress, leaveMethodSignature, pNewRet));

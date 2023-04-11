@@ -25,7 +25,8 @@ enum CoverageEvents {
     Leave,
     BranchHit,
     Call,
-    Tailcall
+    Tailcall,
+    TrackCoverage
 };
 
 struct CoverageRecord {
@@ -79,7 +80,7 @@ void trackCoverage(OFFSET offset, bool &stillExpectsCoverage);
 
 /// ------------------------------ Probes declarations ---------------------------
 
-void Track_Coverage();
+void Track_Coverage(OFFSET offset, int methodId);
 
 void Branch(OFFSET offset, int methodId);
 

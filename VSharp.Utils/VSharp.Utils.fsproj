@@ -42,6 +42,7 @@
         <Compile Include="Mocking.fs" />
         <Compile Include="UnitTest.fs" />
         <Compile Include="UnitTests.fs" />
+        <Compile Include="CoverageDeserializer.fs" />
         <Compile Include="TestResultsChecker.fs" />
         <Compile Include="PhysicalAddress.fs" />
         <Compile Include="NumericUtils.fs" />
@@ -54,6 +55,7 @@
     </ItemGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\VSharp.CoverageRunner\VSharp.CoverageRunner.csproj" />
       <ProjectReference Include="..\VSharp.CSharpUtils\VSharp.CSharpUtils.csproj" />
     </ItemGroup>
 

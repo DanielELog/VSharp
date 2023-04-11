@@ -14,6 +14,8 @@ private:
     std::atomic<int> refCount;
     ICorProfilerInfo8 *corProfilerInfo;
     Instrumenter *instrumenter;
+    char *passiveResultPath = nullptr;
+    bool isPassiveRun = false;
 
 public:
     CorProfiler();

@@ -177,11 +177,9 @@ static std::vector<MethodInfo> vsharp::collectedMethods;
 
 /// ------------------------------ Probes declarations ---------------------------
 
-void vsharp::Track_Coverage() {
+void vsharp::Track_Coverage(OFFSET offset, int methodId) {
     if (!areProbesEnabled) return;
-    tout << "track coverage called" << std::endl;
-    bool commandsDisabled;
-    trackCoverage(0, commandsDisabled);
+    addCoverage(offset, TrackCoverage, methodId);
 }
 
 void vsharp::Branch(OFFSET offset, int methodId) {
@@ -214,11 +212,11 @@ void vsharp::Track_Enter(OFFSET offset, int methodId, int isSpontaneous) {
 }
 
 void vsharp::Track_EnterMain(OFFSET offset, int methodId, int isSpontaneous) {
+    currentCoverage = new CoverageHistory(offset, methodId);
     enableProbes();
     emptyStacks();
     stackBalanceUp();
     setMainThread();
-    currentCoverage = new CoverageHistory(offset, methodId);
     coverageHistory.push_back(currentCoverage);
 }
 

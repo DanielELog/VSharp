@@ -7,11 +7,21 @@
 #endif
 #include "logging.h"
 #include "memory/memory.h"
+#include <wchar.h>
+#include <locale>
+#include <string>
+#include <cstring>
+#include <codecvt>
 
 #define UNUSED(x) (void)x
 
 using namespace vsharp;
 
+static std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> conv16;
+
+void ConvertToWCHAR(const char *str, std::u16string &result) {
+    result = conv16.from_bytes(str);
+}
 
 CorProfiler::CorProfiler() : refCount(0), corProfilerInfo(nullptr), instrumenter(nullptr)
 {
@@ -59,6 +69,51 @@ HRESULT STDMETHODCALLTYPE CorProfiler::Initialize(IUnknown *pICorProfilerInfoUnk
 
     InitializeProbes();
 
+    // reading environment variables to determine the running mode
+    const char *isPassive = std::getenv("COVERAGE_ENABLE_PASSIVE");
+    if (isPassive != nullptr) {
+        LOG(tout << "WORKING IN PASSIVE MODE" << std::endl);
+
+        isPassiveRun = true;
+
+        std::u16string assemblyNameU16;
+        std::u16string moduleNameU16;
+        
+
+        tout << "0" << std::endl;
+
+        // setting up entry main
+        ConvertToWCHAR(std::getenv("COVERAGE_METHOD_ASSEMBLY_NAME"), assemblyNameU16);
+        tout << "01" << std::endl;
+        ConvertToWCHAR(std::getenv("COVERAGE_METHOD_MODULE_NAME"), moduleNameU16);
+        tout << "02" << std::endl;
+        mainToken = std::stoi(std::getenv("COVERAGE_METHOD_TOKEN"));
+
+        tout << mainToken << std::endl;
+
+        tout << "1" << std::endl;
+
+        mainAssemblyNameLength = assemblyNameU16.size();
+        mainAssemblyName = new WCHAR[mainAssemblyNameLength];
+        memcpy(mainAssemblyName, assemblyNameU16.data(), mainAssemblyNameLength * sizeof(WCHAR));
+
+        tout << "2" << std::endl;
+
+        mainModuleNameLength = moduleNameU16.size();
+        mainModuleName = new WCHAR[mainModuleNameLength];
+        memcpy(mainModuleName, moduleNameU16.data(), mainModuleNameLength * sizeof(WCHAR));
+
+        for (int i = 0; i < mainModuleNameLength; i++)
+            tout << (char)mainModuleName[i];
+        tout << std::endl;
+
+        tout << "3" << std::endl;
+
+        passiveResultPath = std::getenv("COVERAGE_RESULT_PATH");
+        tout << passiveResultPath << std::endl;
+        tout << "started passive coverage" << std::endl;
+    }
+
     auto currentThreadGetter = [=]() {
         ThreadID result;
         HRESULT hr = corProfilerInfo->GetCurrentThreadID(&result);
@@ -76,6 +131,17 @@ HRESULT STDMETHODCALLTYPE CorProfiler::Initialize(IUnknown *pICorProfilerInfoUnk
 
 HRESULT STDMETHODCALLTYPE CorProfiler::Shutdown()
 {
+    if (isPassiveRun) {
+        ULONG size;
+        char *bytes;
+        GetHistory((UINT_PTR)(&size), (UINT_PTR)(&bytes));
+
+        std::ofstream fout;
+        fout.open(passiveResultPath);
+        fout.write(bytes, size);
+        fout.close();
+    }
+
     coverageHistory.clear();
     for (auto el : collectedMethods) {
         delete[] el.assemblyName;
