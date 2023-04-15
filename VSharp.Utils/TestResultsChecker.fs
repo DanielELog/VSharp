@@ -56,7 +56,7 @@ type TestResultsChecker(testDir : DirectoryInfo, runnerDir : DirectoryInfo, expe
             // TODO: try to run DotCover from IntegrationTests in same process
             runDotCover globalArg (runnerWithArgs testDir)
         | None ->
-            let exitCode, error = VSharp.CoverageRunner.CoverageRunner.RunAndGetHistory(runnerWithArgs testDir, "cov.cov", testDir.FullName, methodInfo)
+            let exitCode, error = __notImplemented__()
             exitCode = 0, error
             // TODO: run TestRunner from IntegrationTests in same process
             // let code, _, error = runDotnet (runnerWithArgs testDir)

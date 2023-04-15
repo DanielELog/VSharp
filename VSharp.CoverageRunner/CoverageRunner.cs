@@ -9,6 +9,8 @@ namespace VSharp.CoverageRunner
     {
         private static readonly string ResultName = "coverage.cov";
 
+        // TODO: 'resultPath' and 'workingDirectory' should be unified
+        // TODO: after debug 'Tuple<int, string>' should be changed to 'int'
         public static Tuple<int, string> RunAndGetHistory(string args, string resultPath, string workingDirectory, MethodInfo method)
         {
             string extension;
