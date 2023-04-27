@@ -82,6 +82,12 @@ void vsharp::disableProbes() {
     freeLock();
 }
 
+void vsharp::clearCoverageCollection() {
+    for (auto history : coverageHistory)
+        delete history;
+    coverageHistory.clear();
+}
+
 CoverageHistory::CoverageHistory(OFFSET offset, int methodId) {
     head = new CoverageRecord({offset, EnterMain, nullptr, currentThread(), methodId});
     current = head;
@@ -143,16 +149,19 @@ void CoverageHistory::serialize(char *&buffer) const {
     WRITE_BYTES(int, beginning, nodes);
 }
 
+CoverageHistory::~CoverageHistory() {
+    CoverageRecord *cur = head;
+    CoverageRecord *nxt = head;
+    while (cur != nullptr) {
+        nxt = cur->next;
+        delete cur;
+        cur = nxt;
+    }
+}
+
 void vsharp::addCoverage(OFFSET offset, CoverageEvents event, int methodId) {
     if (currentCoverage == nullptr) FAIL_LOUD("adding coverage on uninitialized node!")
     currentCoverage->AddCoverage(offset, event, methodId);
-}
-
-void vsharp::trackCoverage(OFFSET offset, bool &stillExpectsCoverage) {
-    if (!addCoverageStep(offset, stillExpectsCoverage)) {
-        freeLock();
-        FAIL_LOUD("Path divergence")
-    }
 }
 
 size_t MethodInfo::size() const {
@@ -237,5 +246,4 @@ void vsharp::Track_LeaveMain(OFFSET offset, int methodId) {
 
 void vsharp::Finalize_Call(OFFSET offset) {
     if (!areProbesEnabled) return;
-    tout << "call finalized" << std::endl;
 }

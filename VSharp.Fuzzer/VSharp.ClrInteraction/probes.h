@@ -51,6 +51,7 @@ public:
     void AddCoverage(OFFSET offset, CoverageEvents event, int methodId);
     size_t size() const;
     void serialize(char *&buffer) const;
+    ~CoverageHistory();
 };
 
 struct MethodInfo {
@@ -76,7 +77,7 @@ void disableProbes();
 
 void addCoverage(OFFSET offset, CoverageEvents event, int methodId);
 
-void trackCoverage(OFFSET offset, bool &stillExpectsCoverage);
+void clearCoverageCollection();
 
 /// ------------------------------ Probes declarations ---------------------------
 

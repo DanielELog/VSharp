@@ -655,6 +655,17 @@ ILInstr* ILRewriter::GetInstrFromOffset(unsigned offset)
     return pInstr;
 }
 
+void ILRewriter::PrintEhs()
+{
+    if (m_pEH != nullptr) {
+        for (int i = 0; i < m_nEH; i++) {
+            tout << "handler: " << m_pEH[i].m_pHandlerBegin << " " << m_pEH[i].m_pHandlerEnd << "\n";
+            tout << "    try: " << m_pEH[i].m_pTryBegin << " " << m_pEH[i].m_pTryEnd << "\n";
+            tout << "\n";
+        }
+    }
+}
+
 void ILRewriter::InsertBefore(ILInstr * pWhere, ILInstr * pWhat)
 {
     pWhat->m_pNext = pWhere;
@@ -969,11 +980,6 @@ HRESULT AddProbe(
 
     constexpr auto CEE_LDC_I = sizeof(size_t) == 8 ? CEE_LDC_I8 : sizeof(size_t) == 4 ? CEE_LDC_I4 : throw std::logic_error("size_t must be defined as 8 or 4");
 
-//    if (beforehandInstr != nullptr) {
-//        for (int i = 0; i < instrSize; i++)
-//            pilr->InsertBefore(pInsertProbeBeforeThisInstr, beforehandInstr[i]);
-//    }
-
     pNewInstr = pilr->NewILInstr();
     pNewInstr->m_opcode = CEE_LDC_I;
     pNewInstr->m_Arg64 = methodAddress;
@@ -998,11 +1004,6 @@ HRESULT AddProbeAfter(
     ILInstr * pNewInstr = nullptr;
 
     constexpr auto CEE_LDC_I = sizeof(size_t) == 8 ? CEE_LDC_I8 : sizeof(size_t) == 4 ? CEE_LDC_I4 : throw std::logic_error("size_t must be defined as 8 or 4");
-
-//    if (beforehandInstr != nullptr) {
-//        for (int i = 0; i < instrSize; i++)
-//            pilr->InsertBefore(pInsertProbeBeforeThisInstr, beforehandInstr[i]);
-//    }
 
     pNewInstr = pilr->NewILInstr();
     pNewInstr->m_opcode = CEE_CALLI;
@@ -1166,11 +1167,80 @@ void countOffsets(ILRewriter *pilr) {
     }
 }
 
-void AddLDCInstrBefore(ILRewriter *pilr, ILInstr *pInstr, INT32 arg) {
-    auto pNewInstr = pilr->NewILInstr();
+// returns pointer to the new instruction
+ILInstr *AddLDCInstrBefore(ILRewriter *pilr, ILInstr *pInstr, INT32 arg) {
+    ILInstr *pNewInstr = pilr->NewILInstr();
     pNewInstr->m_opcode = CEE_LDC_I4;
     pNewInstr->m_Arg32 = arg;
     pilr->InsertBefore(pInstr, pNewInstr);
+
+    return pNewInstr;
+}
+
+bool IsTailcallRet(ILInstr *pInstr) {
+    return pInstr->m_opcode == CEE_RET && pInstr->m_pPrev->m_pPrev->m_opcode == CEE_TAILCALL;
+}
+
+bool IsPrefix(ILInstr *pInstr) {
+    return pInstr->m_opcode == CEE_TAILCALL
+        || pInstr->m_opcode == CEE_UNALIGNED
+        || pInstr->m_opcode == CEE_VOLATILE
+        || pInstr->m_opcode == CEE_READONLY
+        || pInstr->m_opcode == CEE_CONSTRAINED
+        ;
+}
+
+void PrintILInstructions(ILRewriter *pilr) {
+    for (ILInstr *pInstr = pilr->GetILList()->m_pNext; pInstr != pilr->GetILList(); pInstr = pInstr->m_pNext) {
+        tout << pInstr << "   " << pInstr->m_offset << " " << opcodetostr(pInstr->m_opcode);
+        if (pInstr->m_opcode >= CEE_BR_S && CEE_BLT_UN >= pInstr->m_opcode)
+            tout << "tg: " << pInstr->m_pTarget->m_offset;
+        if (pInstr->m_opcode == 295)
+            tout << "tg: " << pInstr->m_pTarget->m_offset;
+        tout << "\n";
+    }
+
+    tout << "\n" << "exception handlers" << std::endl;
+
+    pilr->PrintEhs();
+
+    tout << std::endl;
+}
+
+// advances the instruction pointer to the copied version of the original one
+HRESULT AddCoverageProbeWithNop(
+        ILRewriter *pilr,
+        ILInstr *&pInstr,
+        UINT_PTR methodAddress,
+        ULONG32 methodSignature,
+        int methodId)
+{
+    // adding the new instruction
+    ILInstr * pNewRet = pilr->NewILInstr();
+    pNewRet->m_opcode = pInstr->m_opcode;
+    pNewRet->m_Arg64 = pInstr->m_Arg64; // using the widest argument of the union to copy it
+    pilr->InsertAfter(pInstr, pNewRet);
+
+    pInstr->m_opcode = CEE_NOP;
+
+    AddLDCInstrBefore(pilr, pNewRet, (INT32)pInstr->m_offset);
+
+    AddLDCInstrBefore(pilr, pNewRet, methodId);
+
+    // adding the probe
+    IfFailRet(AddProbe(pilr, methodAddress, methodSignature, pNewRet));
+
+    // changing exception handlers bounds if we were on the end of handler block
+    if (pilr->m_pEH != nullptr) {
+        for (int i = 0; i < pilr->m_nEH; i++) {
+            if (pilr->m_pEH[i].m_pHandlerEnd == pInstr) {
+                pilr->m_pEH[i].m_pHandlerEnd = pNewRet;
+            }
+        }
+    }
+
+    pInstr = pNewRet;
+    return S_OK;
 }
 
 // Uses the general-purpose ILRewriter class to import original
@@ -1207,31 +1277,45 @@ HRESULT RewriteIL(
 
     IfFailRet(rewriter.Import());
     countOffsets(&rewriter);
+    
+    if (isMain) {
+        LOG(tout << "original main method: ");
+        PrintILInstructions(pilr);
+    }
 
     BOOL isTailCall = FALSE;
 
-    std::set<INT32> branchTargets;
+    // keeping <target, branch> in case we need it for extra br insertion
+    std::set<std::pair<ILInstr*, ILInstr*>> branchTargets;
+    std::set<unsigned> coveredInstructions;
+
+    // tout << "probe insertion" << std::endl;
 
     // adding probes for coverage tracking
     for (ILInstr * pInstr = pilr->GetILList()->m_pNext; pInstr != pilr->GetILList(); pInstr = pInstr->m_pNext)
     {
         // branch coverage
-        if (CEE_BR_S <= pInstr->m_opcode && pInstr->m_opcode <= CEE_SWITCH) {
-            AddLDCInstrBefore(pilr, pInstr, (INT32)pInstr->m_offset);
-            // auto pNewInstr = pilr->NewILInstr();
-            // pNewInstr->m_opcode = CEE_LDC_I4;
-            // pNewInstr->m_Arg32 = (INT32)pInstr->m_offset;
-            // pilr->InsertBefore(pInstr, pNewInstr);
+        if ((CEE_BR_S <= pInstr->m_opcode && pInstr->m_opcode <= CEE_SWITCH)
+            || pInstr->m_opcode == CEE_LEAVE || pInstr->m_opcode == CEE_LEAVE_S) {
+            coveredInstructions.insert(pInstr->m_offset);
+            AddCoverageProbeWithNop(pilr, pInstr, covProb->Branch_Addr, covProb->Branch_Sig.getSig(), methodId);
 
-            AddLDCInstrBefore(pilr, pInstr, methodId);
-            // pNewInstr = pilr->NewILInstr();
-            // pNewInstr->m_opcode = CEE_LDC_I4;
-            // pNewInstr->m_Arg32 = methodId;
-            // pilr->InsertBefore(pInstr, pNewInstr);
-
-            IfFailRet(AddProbe(pilr, covProb->Branch_Addr, covProb->Branch_Sig.getSig(), pInstr));
-
-            branchTargets.insert(pInstr->m_Arg32);
+            // inserting all switch cases as possible target points
+            if (pInstr->m_opcode == CEE_SWITCH) {
+                ILInstr *curSwitchArg = pInstr->m_pNext;
+                for (int i = 0; i < pInstr->m_Arg32; i++) {
+                    assert(curSwitchArg->m_opcode == 295); // checking switch arg constant
+                    branchTargets.insert({ curSwitchArg->m_pTarget, pInstr });
+                    curSwitchArg = curSwitchArg->m_pNext;
+                }
+                // inserting first instruction after switch
+                branchTargets.insert({ curSwitchArg, pInstr });
+            }
+            else {
+                // inserting true and false branchings
+                branchTargets.insert({ pInstr->m_pTarget, pInstr });
+                branchTargets.insert({ pInstr->m_pNext, pInstr });
+            }
 
             continue;
         }
@@ -1263,6 +1347,7 @@ HRESULT RewriteIL(
                     //
                     // need to add the probe before the prefix
                     instr = pInstr->m_pPrev;
+                    // instr = pInstr;
                     trackCallAddr = covProb->Track_Tailcall_Addr;
                     trackCallSig = covProb->Track_Tailcall_Sig.getSig();
                 }
@@ -1271,26 +1356,15 @@ HRESULT RewriteIL(
                     trackCallAddr = covProb->Track_Call_Addr;
                     trackCallSig = covProb->Track_Call_Sig.getSig();
                 }
-                AddLDCInstrBefore(pilr, instr, (INT32)pInstr->m_offset);
-                // auto pNewInstr = pilr->NewILInstr();
-                // pNewInstr->m_opcode = CEE_LDC_I4;
-                // pNewInstr->m_Arg32 = (INT32)pInstr->m_offset;
-                // pilr->InsertBefore(instr, pNewInstr);
-
-                AddLDCInstrBefore(pilr, instr, methodId);
-                // pNewInstr = pilr->NewILInstr();
-                // pNewInstr->m_opcode = CEE_LDC_I4;
-                // pNewInstr->m_Arg32 = methodId;
-                // pilr->InsertBefore(instr, pNewInstr);
-
-                IfFailRet(AddProbe(pilr, trackCallAddr, trackCallSig, instr));
+                coveredInstructions.insert(instr->m_offset);
+                AddCoverageProbeWithNop(pilr, instr, trackCallAddr, trackCallSig, methodId);
                 break;
             }
             case CEE_RET:
             {
                 if (isTailCall) {
                     // instruction sequence is:
-                    // .tailcall
+                    // tail.
                     // call
                     // ret <- returning flag to its default position here
                     isTailCall = FALSE;
@@ -1304,31 +1378,19 @@ HRESULT RewriteIL(
 
                 // NOTE: The NOP is not strictly required, but is a simplification of the implementation.
                 // RET->NOP
-                pInstr->m_opcode = CEE_NOP;
+                coveredInstructions.insert(pInstr->m_offset);
+                AddCoverageProbeWithNop(pilr, pInstr, leaveMethodAddress, leaveMethodSignature, methodId);
+                break;
+            }
 
-                // Add the new RET after
-                ILInstr * pNewRet = pilr->NewILInstr();
-                pNewRet->m_opcode = CEE_RET;
-                pilr->InsertAfter(pInstr, pNewRet);
-
-                //AddOffsetInstrBefore(pilr, pInstr);
-                AddLDCInstrBefore(pilr, pNewRet, (INT32)pInstr->m_offset);
-                // auto pNewInstr = pilr->NewILInstr();
-                // pNewInstr->m_opcode = CEE_LDC_I4;
-                // pNewInstr->m_Arg32 = (INT32)pInstr->m_offset;
-                // pilr->InsertBefore(pNewRet, pNewInstr);
-
-                AddLDCInstrBefore(pilr, pNewRet, methodId);
-                // offsetInstr = pilr->NewILInstr();
-                // offsetInstr->m_opcode = CEE_LDC_I4;
-                // offsetInstr->m_Arg32 = (INT32)methodId;
-                // pilr->InsertBefore(pNewRet, offsetInstr);
-
-                // Add now insert the epilog before the new RET
-                IfFailRet(AddProbe(pilr, leaveMethodAddress, leaveMethodSignature, pNewRet));
-
-                // Advance pInstr after all this gunk so the for loop continues properly
-                pInstr = pNewRet;
+            // handling exception blocks
+            case CEE_ENDFINALLY:
+            case CEE_ENDFILTER:
+            // case CEE_THROW:
+            // case CEE_RETHROW:
+            {
+                coveredInstructions.insert(pInstr->m_offset);
+                AddCoverageProbeWithNop(pilr, pInstr, covProb->Track_Coverage_Addr, covProb->Track_Coverage_Sig.getSig(), methodId);
                 break;
             }
 
@@ -1337,17 +1399,73 @@ HRESULT RewriteIL(
         }
     }
 
+    // adding probes for branch targets now as they can point anywhere in the code
+    for (auto targetAndBranch : branchTargets) {
+        ILInstr *target = targetAndBranch.first;
+        ILInstr *branch = targetAndBranch.second;
+
+        if (IsPrefix(target->m_pPrev))
+            tout << "HUH??? TARGET SKIPPED PREFIX???" << std::endl;
+
+        if (target == pilr->GetILList() || coveredInstructions.find(target->m_offset) != coveredInstructions.end())
+            continue;
+        coveredInstructions.insert(target->m_offset);
+
+        if (!IsTailcallRet(target)) {
+            AddCoverageProbeWithNop(pilr, target, covProb->Track_Coverage_Addr, covProb->Track_Coverage_Sig.getSig(), methodId);
+            continue;
+        }
+        
+        tout << "TAILCALL SHENANIGANS AWARE" << std::endl;
+
+        // target is a ret after a tailcall:
+        //
+        // tail.
+        // call
+        // ret
+        //
+        // cannot add instructions before the return; changing the target of the original branch and creating new ret
+
+        // generated IL-code:
+        //
+        // 0: <normal control flow before the original branch>
+        // 1: original branch with target to 3
+        // 2: br with target to 5
+        // 3: probe call
+        // 4: ret
+        // 5: <normal control flow after the original branch>
+
+        // inserting new ret after the branch
+        ILInstr *pNewRet = pilr->NewILInstr();
+        pNewRet->m_opcode = CEE_RET;
+        pilr->InsertAfter(branch, pNewRet);
+
+        // remembering the original ret's offset
+        ILInstr *probeStart = AddLDCInstrBefore(pilr, pNewRet, (INT32)target->m_offset);
+
+        AddLDCInstrBefore(pilr, pNewRet, methodId);
+
+        // adding leave probe as it's a normal return without tailcall
+        IfFailRet(AddProbe(pilr, leaveMethodAddress, leaveMethodSignature, pNewRet));
+
+        // rerouting the original branch target to our probe
+        branch->m_pTarget = probeStart;
+
+        if (branch->m_opcode == CEE_BR || branch->m_opcode == CEE_BR_S)
+            continue; // the branch is unconditional so we will always go to the target; no need for the skipping branch
+
+        // adding unconditional branch to skip the inserted instructions in case the branch fails
+        ILInstr *skipBranch = pilr->NewILInstr();
+        skipBranch->m_opcode = CEE_BR;
+        skipBranch->m_pTarget = pNewRet->m_pNext;
+        pilr->InsertAfter(branch, skipBranch);
+    }
+
     IfFailRet(AddEnterProbe(&rewriter, enterMethodAddress, enterMethodSignature, methodId));
 
     if (isMain) {
-        tout << "instructions after: " << std::endl;
-
-        for (ILInstr *pInstr = pilr->GetILList()->m_pNext; pInstr != pilr->GetILList(); pInstr = pInstr->m_pNext) {
-            tout << pInstr->m_offset << " " << opcodetostr(pInstr->m_opcode);
-            if (pInstr->m_opcode >= CEE_BR_S && CEE_BLT_UN >= pInstr->m_opcode)
-                tout << "tg: " << pInstr->m_pTarget->m_offset;
-            tout << "\n";
-        }
+        LOG(tout << "rewritten main method: ");
+        PrintILInstructions(pilr);
     }
 
     IfFailRet(rewriter.Export());

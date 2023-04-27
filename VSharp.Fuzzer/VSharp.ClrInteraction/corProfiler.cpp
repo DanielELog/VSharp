@@ -49,16 +49,17 @@ HRESULT STDMETHODCALLTYPE CorProfiler::Initialize(IUnknown *pICorProfilerInfoUnk
     DWORD eventMask =
         COR_PRF_MONITOR_JIT_COMPILATION |
         COR_PRF_DISABLE_ALL_NGEN_IMAGES |
-//        COR_PRF_DISABLE_OPTIMIZATIONS |
+        COR_PRF_DISABLE_OPTIMIZATIONS |
 //        COR_PRF_MONITOR_CACHE_SEARCHES |
         COR_PRF_MONITOR_EXCEPTIONS |
         COR_PRF_MONITOR_CLR_EXCEPTIONS |
         COR_PRF_DISABLE_TRANSPARENCY_CHECKS_UNDER_FULL_TRUST | /* helps the case where this profiler is used on Full CLR */
-        COR_PRF_DISABLE_INLINING |
+        COR_PRF_DISABLE_INLINING
 //        COR_PRF_MONITOR_GC |
 //        COR_PRF_ENABLE_OBJECT_ALLOCATED |
 //        COR_PRF_MONITOR_OBJECT_ALLOCATED |
-        COR_PRF_ENABLE_REJIT;
+        // COR_PRF_ENABLE_REJIT
+        ;
 
     // TODO: place IfFailRet here, log fails!
     auto hr = this->corProfilerInfo->SetEventMask(eventMask);
@@ -109,7 +110,7 @@ HRESULT STDMETHODCALLTYPE CorProfiler::Initialize(IUnknown *pICorProfilerInfoUnk
 
         tout << "3" << std::endl;
 
-        passiveResultPath = std::getenv("COVERAGE_RESULT_PATH");
+        passiveResultPath = std::getenv("COVERAGE_RESULT_NAME");
         tout << passiveResultPath << std::endl;
         tout << "started passive coverage" << std::endl;
     }
@@ -137,12 +138,13 @@ HRESULT STDMETHODCALLTYPE CorProfiler::Shutdown()
         GetHistory((UINT_PTR)(&size), (UINT_PTR)(&bytes));
 
         std::ofstream fout;
+        ///tout << "writing history to: " << passiveResultPath << std::endl;
         fout.open(passiveResultPath);
         fout.write(bytes, size);
         fout.close();
     }
 
-    coverageHistory.clear();
+    clearCoverageCollection();
     for (auto el : collectedMethods) {
         delete[] el.assemblyName;
         delete[] el.moduleName;
@@ -289,7 +291,7 @@ bool jitInProcess = false;
 
 HRESULT STDMETHODCALLTYPE CorProfiler::JITCompilationStarted(FunctionID functionId, BOOL fIsSafeToBlock)
 {
-//    LOG(tout << "JITCompilationStarted, threadID = " << currentThread() << " funcId = " << functionId << std::endl);
+    // LOG(tout << "JITCompilationStarted, threadID = " << currentThread() << " funcId = " << functionId << std::endl);
     UNUSED(fIsSafeToBlock);
     auto instrument = new Instrumenter(*corProfilerInfo);
     HRESULT hr = instrument->instrument(functionId, false);

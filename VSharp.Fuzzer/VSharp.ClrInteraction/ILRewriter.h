@@ -69,9 +69,6 @@ private:
 
     ILInstr m_IL; // Double linked list of all il instructions
 
-    unsigned m_nEH;
-    EHClause *m_pEH;
-
     // Helper table for importing.  Sparse array that maps BYTE offset of beginning of an
     // instruction to that instruction's ILInstr*.  BYTE offsets that don't correspond
     // to the beginning of an instruction are mapped to NULL.
@@ -93,6 +90,9 @@ private:
     void DeallocateILMemory(LPBYTE pBody);
 
 public:
+    unsigned m_nEH;
+    EHClause *m_pEH;
+    
     explicit ILRewriter(
         ICorProfilerInfo *pICorProfilerInfo,
         ICorProfilerFunctionControl *pICorProfilerFunctionControl,
@@ -106,6 +106,7 @@ public:
     ILInstr* NewILInstr();
     void InsertBefore(ILInstr * pWhere, ILInstr * pWhat);
     void InsertAfter(ILInstr * pWhere, ILInstr * pWhat);
+    void PrintEhs();
 
     ~ILRewriter();
 };

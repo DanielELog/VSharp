@@ -24,14 +24,10 @@ public static class TestResultChecker
         out int actualCoverage,
         out string resultMessage)
     {
-        var testRunnerPath =
-            new DirectoryInfo(Directory.GetCurrentDirectory())
-                .EnumerateFiles($"{typeof(TestRunner.TestRunner).FullName}.dll")
-                .Single()
-                .FullName;
+        var testRunnerPath = typeof(TestRunner.TestRunner).Assembly.Location;
         var runnerWithArgs = $"{testRunnerPath} {testDir.FullName}";
-        var (coverage, message) =
-            RunAndGetHistory(runnerWithArgs, "cov.cov", testDir.FullName, methodInfo);
+        var coverage =
+            RunAndGetCoverage(runnerWithArgs, testDir.FullName, methodInfo);
         actualCoverage = coverage;
         resultMessage = string.Empty;
 

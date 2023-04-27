@@ -55,7 +55,6 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\VSharp.CoverageRunner\VSharp.CoverageRunner.csproj" />
       <ProjectReference Include="..\VSharp.CSharpUtils\VSharp.CSharpUtils.csproj" />
     </ItemGroup>
 

@@ -6,4 +6,8 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
+    <ItemGroup>
+      <ProjectReference Include="..\VSharp.IL\VSharp.IL.fsproj" />
+    </ItemGroup>
+
 </Project>

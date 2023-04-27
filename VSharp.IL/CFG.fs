@@ -159,8 +159,8 @@ type internal CfgTemporaryData (method : MethodWithBody) =
         |> Seq.iter (fun bb ->
             sortedBasicBlocks.Add bb
             sortedOffsets.Add bb.StartVertex
-            methodSize <- methodSize + bb.BlockSize
         )
+        methodSize <- sortedOffsets.Count
 
     let cfgDistanceFrom = GraphUtils.distanceCache<offset>()
 
@@ -253,7 +253,7 @@ and CfgInfo internal (cfg : CfgTemporaryData) =
     member this.Sinks = sinks
     member this.Calls = calls
     member this.IsLoopEntry offset = loopEntries.Contains offset
-    member internal this.ResolveBasicBlockIndex offset = resolveBasicBlockIndex offset
+    member this.ResolveBasicBlockIndex offset = resolveBasicBlockIndex offset
     member this.ResolveBasicBlockOffset offset = resolveBasicBlockOffset offset
     member this.ResolveBasicBlock offset = resolveBasicBlock offset
     member this.IsBasicBlockStart offset = resolveBasicBlockOffset offset = offset
@@ -297,7 +297,7 @@ and Method (m : MethodBase) as this =
                 let nextBBOffset = cfg.SortedOffsets.[idx + 1]
                 parsedInstrs |> Array.find (fun instr -> Offset.from (int instr.offset) = nextBBOffset)
             else parsedInstrs.[parsedInstrs.Length - 1].next
-        //TODO: update liberty: is this function any useful?
+        // TODO: add a meaningful message?
         seq { ""
         }
 

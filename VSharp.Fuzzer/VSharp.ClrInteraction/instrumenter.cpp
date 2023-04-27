@@ -52,7 +52,8 @@ void GetHistory(UINT_PTR size, UINT_PTR bytes) {
     assert(buffer - beginning == sizeBytes);
     *(ULONG*)size = sizeBytes;
     *(char**)bytes = beginning;
-    coverageHistory.clear(); // freeing up the history
+
+    clearCoverageCollection(); // freeing up the history
 }
 
 static std::set<std::pair<FunctionID, ModuleID>> vsharp::instrumentedMethods;
@@ -169,11 +170,13 @@ HRESULT Instrumenter::instrument(FunctionID functionId, bool reJIT) {
     IfFailRet(m_profilerInfo.GetFunctionInfo(functionId, &classId, &newModuleId, &m_jittedToken));
     assert((m_jittedToken & 0xFF000000L) == mdtMethodDef);
 
-    auto mp = std::make_pair(m_jittedToken, newModuleId);
-    if (instrumentedMethods.find(mp) != instrumentedMethods.end()) {
-        tout << "repeated JIT; skipped" << std::endl;
-        return S_OK;
-    }
+    // auto mp = std::make_pair(m_jittedToken, newModuleId);
+    // if (instrumentedMethods.find(mp) != instrumentedMethods.end()) {
+    //     tout << "repeated JIT; skipped" << std::endl;
+    //     return S_OK;
+    // }
+
+    tout << "instrumenting " << m_jittedToken << std::endl;
 
     LPCBYTE baseLoadAddress;
     ULONG moduleNameLength;
