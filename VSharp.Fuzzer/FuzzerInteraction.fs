@@ -184,13 +184,14 @@ type FuzzerInteraction (pathToAssembly, outputDir, cancellationToken: Cancellati
             info.EnvironmentVariables.["CORECLR_PROFILER_PATH"] <- profiler
             info.WorkingDirectory <- Directory.GetCurrentDirectory()
             info.FileName <- "dotnet"
-            info.Arguments <- $"VSharp.Fuzzer.dll %s{pathToAssembly} %s{outputDir}"
+            info.Arguments <- $"VSharp.Fuzzer.dll %s{pathToAssembly} %s{outputDir} %s{Directory.GetCurrentDirectory()}"
             info.UseShellExecute <- false
             info.RedirectStandardInput <- false
             info.RedirectStandardOutput <- false
             info.RedirectStandardError <- false
             info
         Logger.trace "Fuzzer started"
+        Logger.trace $"directory: {Directory.GetCurrentDirectory()}"
         Process.Start(config)
 
     let client =

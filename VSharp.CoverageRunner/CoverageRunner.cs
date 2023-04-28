@@ -28,7 +28,7 @@ namespace VSharp.CoverageRunner
             var pathToClient = $"libvsharpConcolic{extension}";
 
             var profiler =
-                $"{Directory.GetCurrentDirectory()}/../../../../VSharp.Fuzzer/VSharp.ClrInteraction/cmake-build-debug/{pathToClient}";
+                $"{Directory.GetCurrentDirectory()}{Path.DirectorySeparatorChar}{pathToClient}";
 
             var info = new ProcessStartInfo
             {
@@ -72,7 +72,7 @@ namespace VSharp.CoverageRunner
             byte[] covHistory;
             try
             {
-                covHistory = File.ReadAllBytes(workingDirectory + "/" + ResultName);
+                covHistory = File.ReadAllBytes(workingDirectory + Path.DirectorySeparatorChar + ResultName);
             }
             catch
             {

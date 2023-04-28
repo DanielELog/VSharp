@@ -231,3 +231,4 @@ VSharp.ClrInteraction/host/*
 VSharp.Test/GeneratedTests/**
 runtime/
 VSharp.Fuzzer/VSharp.ClrInteraction/.vscode/settings.json
+VSharp.CoverageInstrumenter/.vscode/settings.json

@@ -30,6 +30,8 @@ let main argv =
     Logger.error $"PID: {Process.GetCurrentProcess().Id}"
     Logger.error "Fuzzer started!"
 
+    Logger.error $"{argv[2]}"
+
     let app = FuzzerApplication (assembly, outputDir)
     Logger.error "App created"
     app.Start() |> Async.RunSynchronously

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.12)
 
-project(VSharp.ClrInteraction LANGUAGES CXX)
+project(VSharp.CoverageInstrumenter LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,7 +11,7 @@ if (APPLE)
     set(CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS "${CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS} -undefined dynamic_lookup")
 endif()
 
-set(CORECLR_PATH ../../runtime/src/coreclr)
+set(CORECLR_PATH ../runtime/src/coreclr)
 
 include_directories(.
     ${CORECLR_PATH}/pal/inc/rt
