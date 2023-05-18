@@ -252,7 +252,7 @@ namespace IntegrationTests
             return a;
         }
 
-        [TestSvm(95)]
+        [TestSvm(94)]
         public static int TestSolvingCopy(int[] a, int[] b, int i)
         {
             if (a.Length > b.Length && 0 <= i && i < b.Length)
@@ -325,7 +325,7 @@ namespace IntegrationTests
             return 3;
         }
 
-        [TestSvm(98)]
+        [TestSvm(97)]
         public static int TestSolvingCopy3(int[] a, int[] b, int[] c)
         {
             if (a != null && b != null && c != null && a.Length > b.Length && b.Length > c.Length && c.Length > 3)
@@ -392,7 +392,7 @@ namespace IntegrationTests
             return 3;
         }
 
-        [TestSvm(94)]
+        [TestSvm(93)]
         public static int TestOverlappingCopy(int[] a)
         {
             if (a != null && a.Length > 5)
@@ -565,7 +565,7 @@ namespace IntegrationTests
             return res;
         }
 
-        [TestSvm(91)]
+        [TestSvm(90)]
         public static bool ArraySymbolicUpdate(int i)
         {
             var array = new int[] {1, 2, 3, 4, 5};
@@ -588,7 +588,7 @@ namespace IntegrationTests
                 return true;
         }
 
-        [TestSvm(98)]
+        [TestSvm(97)]
         public static bool ArraySymbolicUpdate3(int i, int j)
         {
             var array = new int[] {1, 2, 3, 4, 5};
