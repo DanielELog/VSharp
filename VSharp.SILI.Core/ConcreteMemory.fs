@@ -186,8 +186,7 @@ type public ConcreteMemory private (physToVirt, virtToPhys) =
             GC.SuppressFinalize(obj)
             let physicalAddress = {object = obj}
             virtToPhys.Add(address, physicalAddress)
-            if obj = String.Empty then physToVirt[physicalAddress] <- address
-            else physToVirt.Add(physicalAddress, address)
+            physToVirt[physicalAddress] <- address
 
 // ------------------------------- Reading -------------------------------
 
