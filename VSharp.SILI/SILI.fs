@@ -283,8 +283,9 @@ type public SILI(options : SiliOptions) =
     member private x.Forward (s : cilState) =
         let loc = s.currentLoc
         // TODO: update pobs when visiting new methods; use coverageZone
-        statistics.TrackStepForward s
         let goodStates, iieStates, errors = interpreter.ExecuteOneInstruction s
+        for s in goodStates do
+            statistics.TrackStepForward s
         let goodStates, toReportFinished = goodStates |> List.partition (fun s -> isExecutable s || isIsolated s)
         toReportFinished |> List.iter reportFinished
         let errors, toReportExceptions = errors |> List.partition (fun s -> isIsolated s || not <| stoppedByException s)
