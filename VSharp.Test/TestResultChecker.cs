@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
+using Microsoft.Z3;
 using static VSharp.CoverageRunner.CoverageRunner;
 using static VSharp.TestRunner.TestRunner;
 
@@ -37,6 +38,11 @@ public static class TestResultChecker
         out int actualCoverage,
         out string resultMessage)
     {
+        if (methodInfo.Name == "Unboxing")
+        {
+            Logger.printLogString(Logger.Error, $"tests in directory: {testDir.EnumerateFiles("*.vst").Count()}");
+        }
+
         var runnerWithArgs = $"{testRunnerPath} {testDir.FullName}";
         var coverage = RunAndGetCoverage(runnerWithArgs, testDir, methodInfo);
         actualCoverage = coverage;
