@@ -122,15 +122,6 @@ namespace VSharp.CoverageRunner
                     uniqueBlocks.Add(bbId);
             }
 
-            if (methodInfo.Name == "Unboxing")
-            {
-                foreach (var bb in uniqueBlocks)
-                {
-                    Logger.printLogString(Logger.Error, $"visit: {cfg.SortedBasicBlocks[bb].FinalOffset} size {cfg.SortedBasicBlocks[bb].BlockSize}");
-                }
-                Logger.printLogString(Logger.Error, $"total: {cfg.MethodSize}");
-            }
-
             var coveredSize =
                 uniqueBlocks.Sum(blockOffset =>
                     cfg.SortedBasicBlocks[blockOffset].BlockSize);
