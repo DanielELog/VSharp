@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net7.0</TargetFramework>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="APITypes.fs" />
+        <Compile Include="AssembliesCollector.fs" />
+        <Compile Include="CoverageCollector.fs" />
+        <Compile Include="TestCrosschecker.fs" />
+        <Compile Include="TestMinimizer.fs" />
+        <Compile Include="TestProcessingAPI.fs" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="MSTest" Version="3.3.0-preview.24164.4" />
+      <PackageReference Include="NUnit" Version="3.12.0" />
+      <PackageReference Include="xunit" Version="2.8.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\VSharp.CoverageTool\VSharp.CoverageTool.fsproj" />
+      <ProjectReference Include="..\VSharp.CSharpUtils\VSharp.CSharpUtils.csproj" />
+      <ProjectReference Include="..\VSharp.Utils\VSharp.Utils.fsproj" />
+    </ItemGroup>
+
+</Project>

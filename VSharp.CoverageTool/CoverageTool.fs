@@ -266,3 +266,38 @@ type PassiveCoverageTool(workingDirectory: DirectoryInfo, method: MethodBase) =
                 -1
 
 
+type UnderDotnetTestCoverageTool(allAssembliesPath: string, mainAssembliesPath: string, resultPath: string) =
+    static let TestRunnerPath = typeof<NUnitTestRunner.NUnitTestRunnerProgram>.Assembly.Location;
+    
+    let dotnetTestEnv =
+        Configuration.createUnspecifiedCoverageToolConfiguration()
+        |> Configuration.withAllMethodsCoverageToolConfiguration
+        |> Configuration.withUnderDotnetTestConfiguration allAssembliesPath mainAssembliesPath resultPath
+    
+    member this.RunTestProjectWithCoverage(assemblyPath: string, testOrderResultPath: string) =
+        let procInfo =
+            ProcessStartInfo()
+            |> (fun x ->
+                    x.Arguments <- @$"{TestRunnerPath} {assemblyPath} {testOrderResultPath}"
+                    x.FileName <- DotnetExecutablePath.ExecutablePath
+                    x.WorkingDirectory <- Directory.GetCurrentDirectory()
+                    x
+            )
+            |> setProcInfoEnvironment dotnetTestEnv
+            
+        let proc = procInfo.StartWithLogging(
+            (fun x -> Logger.info $"{x}"),
+            (fun x -> Logger.error $"{x}")
+        )
+        
+        proc.WaitForExit()
+        
+        if proc.ExitCode <> 0
+            then
+                Logger.error $"[\"{assemblyPath}\"] Process with CoverageTool returned an error!"
+                None
+            else
+                Logger.info $"assembly {assemblyPath} ran successfully with CoverageTool"
+                let coverage = File.ReadAllBytes(resultPath)
+                               |> CoverageDeserializer.getRawReports
+                Some coverage

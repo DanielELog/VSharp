@@ -30,7 +30,7 @@ void CoverageRecord::serialize(std::vector<char>& buffer) const {
 }
 //endregion
 
-auto GetMicrosecondTime() {
+long long GetMicrosecondTime() {
     using namespace std::chrono;
     return duration_cast<microseconds>(system_clock::now().time_since_epoch()).count();
 }

@@ -24,9 +24,14 @@
 
     <ItemGroup>
         <Compile Include="CoverageTool.fs" />
+        <Content Include="disableParallelization.runsettings">
+            <Link>disableParallelization.runsettings</Link>
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </Content>
     </ItemGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\NUnitTestRunner\NUnitTestRunner.csproj" />
       <ProjectReference Include="..\VSharp.IL\VSharp.IL.fsproj" />
       <ProjectReference Include="..\VSharp.Utils\VSharp.Utils.fsproj" />
     </ItemGroup>
