@@ -265,3 +265,4 @@ type PassiveCoverageTool(workingDirectory: DirectoryInfo, method: MethodBase) =
                 Logger.error $"Run with coverage failed with exit code: {proc.ExitCode}"
                 -1
 
+
