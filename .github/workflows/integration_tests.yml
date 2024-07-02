@@ -22,6 +22,8 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-nuget-
     - name: Run tests
+      with:
+        dotnet-version: 8.0.x
       run: |
         dotnet tool restore
         dotnet test -c DebugTailRec --logger "trx;LogFileName=tests-results.trx" --filter "ConcatStrings2"
