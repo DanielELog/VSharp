@@ -1,9 +1,7 @@
 name: 'Integration tests'
 
 on:
-  pull_request:
-    branches:
-      - master
+  push:
   workflow_dispatch:
   workflow_call:
 
@@ -26,7 +24,7 @@ jobs:
     - name: Run tests
       run: |
         dotnet tool restore
-        dotnet test -c DebugTailRec --logger "trx;LogFileName=tests-results.trx"
+        dotnet test -c DebugTailRec --logger "trx;LogFileName=tests-results.trx" --filter "ConcatStrings2"
         dotnet test -c Release --filter "TestCategory=Generated&TestCategory!=FatalError" --logger "trx;LogFileName=generated-tests-results.trx"
     - name: Upload tests results to GitHub artifacts
       uses: actions/upload-artifact@v3

@@ -31,6 +31,8 @@ CorProfiler::~CorProfiler()
 
 HRESULT STDMETHODCALLTYPE CorProfiler::Initialize(IUnknown *pICorProfilerInfoUnk)
 {
+    std::setbuf(stderr, NULL);
+    fprintf(stderr, "initialized coverage instrumenter");
     const char* waitDebuggerAttached = std::getenv("COVERAGE_TOOL_WAIT_DEBUGGER_ATTACHED");
     volatile int done = waitDebuggerAttached == nullptr ? 1 : 0;
     while (!done) OS::sleepSeconds(1);
