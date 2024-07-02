@@ -1110,21 +1110,14 @@ bool IsPrefix(ILInstr *pInstr) {
 }
 
 void PrintILInstructions(ILRewriter *pilr) {
-    LOG(
-        for (ILInstr* pInstr = pilr->GetILList()->m_pNext; pInstr != pilr->GetILList(); pInstr = pInstr->m_pNext) {
-            tout << pInstr << "   " << pInstr->m_offset << " " << opcodetostr(pInstr->m_opcode);
-            if (pInstr->m_opcode >= CEE_BR_S && CEE_BLT_UN >= pInstr->m_opcode)
-                tout << "tg: " << pInstr->m_pTarget->m_offset;
-            if (pInstr->m_opcode == 295)
-                tout << "tg: " << pInstr->m_pTarget->m_offset;
-            tout << "\n";
-        }
-
-        tout << "\n" << "exception handlers" << std::endl;
-
-        tout << std::endl;
-    );
-    pilr->PrintEhs();
+    for (ILInstr* pInstr = pilr->GetILList()->m_pNext; pInstr != pilr->GetILList(); pInstr = pInstr->m_pNext) {
+        fprintf(stderr, "%#010x  %u %s ", pInstr, pInstr->m_offset, opcodetostr(pInstr->m_opcode));
+        if (pInstr->m_opcode >= CEE_BR_S && CEE_BLT_UN >= pInstr->m_opcode)
+            fprintf(stderr, "tg: %u ", pInstr->m_pTarget->m_offset);
+        if (pInstr->m_opcode == 295)
+            fprintf(stderr, "tg: %u ", pInstr->m_pTarget->m_offset);
+        fprintf(stderr, "\n");
+    }
 }
 
 void CorrectHandlers(ILRewriter* pilr, ILInstr* pInstr, ILInstr* pNewInstr)
@@ -1274,6 +1267,8 @@ HRESULT RewriteIL(
 
     IfFailRet(rewriter.Import());
     countOffsets(&rewriter);
+
+    PrintILInstructions(pilr);
 
     BOOL isTailCall = FALSE;
 
